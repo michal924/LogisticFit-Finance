@@ -1,28 +1,28 @@
-import { Outlet } from "react-router-dom";
-import { Sidebar } from "./Sidebar";
-import { Topbar } from "./Topbar";
-import { StagingBar } from "./StagingBar";
-import { useUiStore } from "../../stores/uiStore";
+import { useState } from 'react';
+import { Outlet } from 'react-router-dom';
+import { Sidebar } from './Sidebar';
+import { Topbar } from './Topbar';
+import { useUiStore } from '../../stores/uiStore';
+import type { Lang } from '../../i18n';
 
 export function AppShell() {
-  const env = import.meta.env.VITE_ENV ?? "prod";
-  const isStaging = env === "staging";
-
   const { sidebarCollapsed, density } = useUiStore();
+  const [lang] = useState<Lang>('pl');
+  const [query, setQuery] = useState('');
 
   return (
     <div
       className="app"
-      data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}
-      data-staging={isStaging ? "true" : "false"}
+      data-sidebar={sidebarCollapsed ? 'collapsed' : 'expanded'}
       data-density={density}
     >
-      {isStaging && <StagingBar />}
-      <Sidebar />
-      <Topbar />
+      <Sidebar lang={lang} />
+      <Topbar lang={lang} query={query} setQuery={setQuery} />
       <main className="content">
-        <Outlet />
+        <Outlet context={{ lang, query }} />
       </main>
     </div>
   );
 }
+
+export default AppShell;

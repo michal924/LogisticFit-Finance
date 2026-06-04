@@ -1,104 +1,60 @@
-import { useRef, useEffect } from 'react';
+import { useUiStore } from '../../stores/uiStore';
+import { Ico } from '../ui/icons';
+import type { Lang } from '../../i18n';
+import { makeT } from '../../i18n';
 import { useLocation } from 'react-router-dom';
-import { Search, Bell, HelpCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { isStaging } from '../../services/environment';
 
-const MODULE_NAMES: Record<string, string> = {
-  '/':                'Dashboard',
-  '/offers':          'Oferty',
-  '/pipeline':        'Pipeline',
-  '/audits':          'Audyty',
-  '/implementation':  'Wdrożenia',
-  '/documents':       'Dokumenty',
-  '/templates':       'Szablony',
-  '/settings':        'Ustawienia',
+const CRUMBS: Record<string, [string, string]> = {
+  '':                  ['Faktury', 'Dashboard'],
+  'faktury-sprzedazy': ['Faktury', 'Faktury sprzedaży'],
+  'faktury-kosztowe':  ['Faktury', 'Faktury kosztowe'],
+  'bank':              ['Bank', 'Bank firmowy'],
+  'bank-prywatny':     ['Bank', 'Bank prywatny'],
+  'kontrahenci':       ['Analiza', 'Kontrahenci'],
+  'koszty':            ['Analiza', 'Koszty'],
+  'raporty':           ['Analiza', 'Raporty'],
+  'jpk':               ['Admin', 'JPK'],
+  'ustawienia':        ['Admin', 'Ustawienia'],
 };
 
-function EnvBadge() {
-  const staging = isStaging();
-  return (
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 10px', borderRadius: 999,
-      fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-      textTransform: 'uppercase',
-      background: staging ? 'var(--lf-warning-bg)' : 'var(--lf-green-100)',
-      color: staging ? '#7a4e00' : 'var(--lf-green-900)',
-      border: `1px solid ${staging ? '#e8c57a' : 'var(--lf-green-300)'}`,
-    }}>
-      {staging && (
-        <span style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: 'var(--lf-warning)',
-          animation: 'pulse 1.6s ease-in-out infinite',
-        }} />
-      )}
-      {staging ? 'STAGING' : 'PROD'}
-    </div>
-  );
+function initials(name: string) {
+  return name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 }
 
-function Avatar({ name }: { name: string }) {
-  const initials = name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
-  return (
-    <div style={{
-      width: 32, height: 32, borderRadius: '50%',
-      background: 'var(--lf-navy-100)', color: 'var(--accent)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 12, fontWeight: 700, flexShrink: 0, cursor: 'pointer',
-    }}>
-      {initials}
-    </div>
-  );
-}
-
-export function Topbar() {
-  const { user } = useAuth();
+export function Topbar({ lang, query, setQuery }: { lang: Lang; query: string; setQuery: (q: string) => void }) {
+  const t = makeT(lang);
+  const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
   const location = useLocation();
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  // Normalize path: /audits/123 → /audits
-  const basePath = '/' + location.pathname.split('/').filter(Boolean)[0] || '/';
-  const moduleName = MODULE_NAMES[location.pathname] ?? MODULE_NAMES[basePath] ?? 'Compliance Manager';
-
-  // ⌘K / Ctrl+K → focus search
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  const { user } = useAuth();
+  const id = location.pathname === '/' ? '' : location.pathname.replace('/', '').split('/')[0];
+  const [crumb, title] = CRUMBS[id] ?? ['', id];
 
   return (
     <header className="topbar">
+      {sidebarCollapsed && (
+        <button className="icon-btn" onClick={() => setSidebarCollapsed(false)} aria-label="Rozwiń" style={{ marginRight: 4 }}>
+          <Ico name="PanelLeft" size={18} />
+        </button>
+      )}
       <div className="topbar-title">
-        <span className="crumb">LogisticFit / Compliance</span>
-        <span className="name">{moduleName}</span>
+        <span className="crumb">{crumb}</span>
+        <span className="name">{title}</span>
       </div>
-
       <div className="topbar-search">
-        <span className="search-ico"><Search size={15} /></span>
-        <input
-          ref={searchRef}
-          placeholder="Szukaj klienta, oferty, dokumentu… (⌘K)"
-        />
+        <span className="search-ico"><Ico name="Search" size={16} /></span>
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('search.placeholder')} />
       </div>
-
       <div className="topbar-right">
-        <EnvBadge />
-        <button className="icon-btn" aria-label="Powiadomienia" title="Powiadomienia" style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--lf-slate-200)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--fg-3)' }}>
-          <Bell size={17} />
+        <button className="icon-btn" aria-label="Powiadomienia">
+          <Ico name="Bell" size={18} />
         </button>
-        <button className="icon-btn" aria-label="Pomoc" title="Pomoc" style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--lf-slate-200)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--fg-3)' }}>
-          <HelpCircle size={17} />
-        </button>
-        {user && <Avatar name={user.name ?? user.username ?? 'U'} />}
+        <span className="avatar" data-color="navy" title={user?.name ?? 'MR'} style={{ fontSize: 12 }}>
+          {initials(user?.name ?? 'Michał Rzeźnik')}
+        </span>
       </div>
     </header>
   );
 }
+
+export default Topbar;
