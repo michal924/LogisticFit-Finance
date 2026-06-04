@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
-import { JPKService } from '../services/graphService';
+import { JPKService, filterByContext } from '../services/graphService';
 
 
 type JpkStatus = 'sent' | 'processing' | 'error' | 'draft';
@@ -35,12 +36,14 @@ type JpkRow = {
 };
 
 export default function JPK() {
+  const { context } = useOutletContext<{ context: string }>();
   const [rows, setRows] = useState<JpkRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     JPKService.getAll()
-      .then((items: any[]) => {
+      .then((rawItems: any[]) => {
+        const items = filterByContext(rawItems, context);
         const mapped: JpkRow[] = items.map(item => {
           const f = item.fields || {};
           const rawStatus = (f.Status || 'draft').toLowerCase();
@@ -59,7 +62,7 @@ export default function JPK() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [context]);
 
   const sentCount = rows.filter(r => r.status === 'sent').length;
   const currentDraft = rows.find(r => r.status === 'draft');

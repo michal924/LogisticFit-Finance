@@ -4,7 +4,7 @@ import { Ico } from '../components/ui/icons';
 import type { Lang } from '../i18n';
 import { makeT } from '../i18n';
 import { getInvoices } from '../services/invoiceService';
-import { TransactionsService } from '../services/graphService';
+import { TransactionsService, filterByContext } from '../services/graphService';
 import type { Invoice } from '../types';
 
 function fmt(n: number) {
@@ -31,7 +31,7 @@ function KpiCard({ label, icon, value, unit, delta, dir }: {
 const MONTH_SHORT = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
 
 export default function Dashboard() {
-  const { lang } = useOutletContext<{ lang: Lang; query: string }>();
+  const { lang, context } = useOutletContext<{ lang: Lang; query: string; context: string }>();
   const t = makeT(lang);
 
   const now = new Date();
@@ -48,18 +48,18 @@ export default function Dashboard() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      getInvoices('sales'),
-      getInvoices('cost'),
+      getInvoices('sales', context),
+      getInvoices('cost', context),
       TransactionsService.getAll(),
     ])
       .then(([sales, costs, txns]) => {
         setSalesInvoices(sales);
         setCostInvoices(costs);
-        setTransactions(txns);
+        setTransactions(filterByContext(txns, context));
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [context]);
 
   // Compute KPIs for selected month/year
   const monthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;

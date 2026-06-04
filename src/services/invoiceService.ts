@@ -24,7 +24,7 @@ function spToInvoice(item: any): Invoice {
 }
 
 // Mapowanie Invoice → SharePoint fields
-function invoiceToSp(inv: Invoice) {
+function invoiceToSp(inv: Invoice, context?: string) {
   return {
     InvoiceNumber: inv.number,
     IssueDate: inv.issueDate,
@@ -39,22 +39,25 @@ function invoiceToSp(inv: Invoice) {
     Paid: inv.paid,
     Lines: JSON.stringify(inv.lines || []),
     Notes: inv.notes || '',
+    ...(context ? { Context: context } : {}),
   };
 }
 
-export async function getInvoices(type: 'sales' | 'cost'): Promise<Invoice[]> {
+// context: 'jdg' | 'spolka' — filtruje faktury per działalność (stare rekordy bez Context = jdg)
+export async function getInvoices(type: 'sales' | 'cost', context: string = 'jdg'): Promise<Invoice[]> {
   const items = await InvoicesService.getAll();
   return items
+    .filter((i: any) => (i.fields?.Context || 'jdg') === context)
     .map((i: any) => spToInvoice(i))
     .filter((i: Invoice) => i.type === type)
     .sort((a: Invoice, b: Invoice) => b.issueDate.localeCompare(a.issueDate));
 }
 
-export async function saveInvoice(inv: Invoice): Promise<void> {
+export async function saveInvoice(inv: Invoice, context: string = 'jdg'): Promise<void> {
   if (inv.spId) {
-    await InvoicesService.update(inv.spId, invoiceToSp(inv));
+    await InvoicesService.update(inv.spId, invoiceToSp(inv, context));
   } else {
-    await InvoicesService.add(invoiceToSp(inv));
+    await InvoicesService.add(invoiceToSp(inv, context));
   }
 }
 

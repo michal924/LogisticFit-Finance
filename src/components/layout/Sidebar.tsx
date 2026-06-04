@@ -4,6 +4,16 @@ import { useAuth } from '../../hooks/useAuth';
 import { Ico } from '../ui/icons';
 import type { Lang } from '../../i18n';
 import { makeT } from '../../i18n';
+import { useContextStore } from '../../stores/contextStore';
+
+// Ekrany dostępne w każdym kontekście (id z NAV)
+const SCREENS_BY_CONTEXT: Record<string, string[]> = {
+  // JDG i Spółka: pełen zakres
+  jdg:    ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'jpk', 'ustawienia'],
+  spolka: ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'jpk', 'ustawienia'],
+  // Prywatne: tylko przepływy + analiza, bez faktur/VAT/kontrahentów
+  prywatne: ['', 'bank-prywatny', 'koszty', 'raporty', 'ustawienia'],
+};
 
 // Finance module mark — navy ring + green growth arrow
 function FinanceMark({ size = 28 }: { size?: number }) {
@@ -47,8 +57,15 @@ export function Sidebar({ lang }: { lang: Lang }) {
   const location = useLocation();
   const { sidebarCollapsed: collapsed, setSidebarCollapsed } = useUiStore();
   const { user, logout } = useAuth();
+  const { active } = useContextStore();
 
+  const allowed = SCREENS_BY_CONTEXT[active] ?? SCREENS_BY_CONTEXT.jdg;
   const currentId = location.pathname === '/' ? '' : location.pathname.replace('/', '').split('/')[0];
+
+  // Filtruj sekcje i pozycje wg kontekstu
+  const visibleNav = NAV
+    .map(sec => ({ ...sec, items: sec.items.filter(it => allowed.includes(it.id)) }))
+    .filter(sec => sec.items.length > 0);
 
   return (
     <aside className="sidebar">
@@ -78,7 +95,7 @@ export function Sidebar({ lang }: { lang: Lang }) {
       )}
 
       <nav className="sidebar-nav">
-        {NAV.map(sec => (
+        {visibleNav.map(sec => (
           <div key={sec.section}>
             <div className="sidebar-section">{t(sec.section)}</div>
             {sec.items.map(it => (

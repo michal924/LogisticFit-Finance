@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
-import { TransactionsService } from '../services/graphService';
-import { addListItem } from '../services/graphService';
+import { TransactionsService, addListItem, filterByContext } from '../services/graphService';
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,6 +34,7 @@ function parseAliorCSV(text: string): Row[] {
 }
 
 export default function Bank() {
+  const { context } = useOutletContext<{ context: string }>();
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -46,7 +47,8 @@ export default function Bank() {
   const reload = () => {
     setLoading(true);
     TransactionsService.getAll()
-      .then((items: any[]) => {
+      .then((rawItems: any[]) => {
+        const items = filterByContext(rawItems, context);
         const mapped: Row[] = items.map(item => {
           const f = item.fields || {};
           const amount = f.Amount ?? 0;
@@ -66,7 +68,7 @@ export default function Bank() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, [context]);
 
   const filtered = rows.filter(r => {
     const q = search.toLowerCase();
@@ -96,6 +98,7 @@ export default function Bank() {
           Balance: r.balance,
           TransactionType: r.dir === 'in' ? 'credit' : 'debit',
           BankAccount: 'firmowy',
+          Context: context,
         });
         ok++;
       }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { FileUp, Upload, Loader2, X, Check, Clock, Search, ChevronRight } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
@@ -19,6 +20,7 @@ function fmt(n: number) {
 }
 
 export default function FakturySprzedazy() {
+  const { context } = useOutletContext<{ lang: any; query: string; context: string }>();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
@@ -37,12 +39,12 @@ export default function FakturySprzedazy() {
 
   const reload = async () => {
     setLoading(true);
-    try { setInvoices(await getInvoices('sales')); }
+    try { setInvoices(await getInvoices('sales', context)); }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, [context]);
 
   const filtered = invoices.filter(inv => {
     if (filter === 'paid' && !inv.paid) return false;
@@ -72,7 +74,7 @@ export default function FakturySprzedazy() {
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
         const data = await processPdfWithAI(base64, 'sales');
         const inv: Invoice = { ...data, type: 'sales', paid: false, lines: data.lines || [], currency: 'PLN' } as Invoice;
-        await saveInvoice(inv);
+        await saveInvoice(inv, context);
         ok++;
         setPdfQueue(q => q.map((item, idx) => idx === i ? { ...item, status: 'done' } : item));
       } catch {
@@ -98,7 +100,7 @@ export default function FakturySprzedazy() {
   }
 
   async function handleSave(inv: Invoice) {
-    await saveInvoice(inv);
+    await saveInvoice(inv, context);
     setShowForm(false); setEditing(null);
     await reload();
   }
@@ -110,7 +112,7 @@ export default function FakturySprzedazy() {
   }
 
   async function togglePaid(inv: Invoice) {
-    await saveInvoice({ ...inv, paid: !inv.paid, paymentDate: !inv.paid ? today : undefined });
+    await saveInvoice({ ...inv, paid: !inv.paid, paymentDate: !inv.paid ? today : undefined }, context);
     await reload();
     setSelected(s => s?.spId === inv.spId ? { ...inv, paid: !inv.paid } : s);
   }

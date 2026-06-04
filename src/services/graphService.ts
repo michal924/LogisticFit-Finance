@@ -50,6 +50,14 @@ export async function getListItems(displayName: string, filter?: string): Promis
   return res.value || [];
 }
 
+// Filtruje pozycje po polu Context (client-side — uniknięcie problemów z indeksami)
+export function filterByContext(items: any[], context: string): any[] {
+  return items.filter(it => {
+    const ctx = it.fields?.Context || 'jdg'; // domyślnie jdg dla starych rekordów
+    return ctx === context;
+  });
+}
+
 export async function addListItem(displayName: string, fields: object) {
   const listId = await getListId(displayName);
   return graphFetch('POST', `${SITE}/lists/${listId}/items`, { fields });

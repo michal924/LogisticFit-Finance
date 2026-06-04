@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
 import { getInvoices } from '../services/invoiceService';
 import type { Invoice } from '../types';
@@ -11,6 +12,7 @@ const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'L
 const MONTH_SHORT = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
 
 export default function Koszty() {
+  const { context } = useOutletContext<{ context: string }>();
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth()));
   const [year, setYear] = useState(String(now.getFullYear()));
@@ -18,11 +20,11 @@ export default function Koszty() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getInvoices('cost')
+    getInvoices('cost', context)
       .then(data => setInvoices(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [context]);
 
   // Last 6 months
   const monthlyData: { m: string; value: number; key: string }[] = [];

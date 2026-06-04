@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
-import { ContractorsService } from '../services/graphService';
+import { ContractorsService, filterByContext } from '../services/graphService';
 
 type Role = 'Klient' | 'Dostawca' | 'Oba';
 
@@ -37,6 +38,7 @@ type Contractor = {
 };
 
 export default function Kontrahenci() {
+  const { context } = useOutletContext<{ context: string }>();
   const [filter, setFilter] = useState<Filter>('Wszystkie');
   const [search, setSearch] = useState('');
   const [contractors, setContractors] = useState<Contractor[]>([]);
@@ -44,7 +46,8 @@ export default function Kontrahenci() {
 
   useEffect(() => {
     ContractorsService.getAll()
-      .then((items: any[]) => {
+      .then((rawItems: any[]) => {
+        const items = filterByContext(rawItems, context);
         const mapped: Contractor[] = items.map(item => {
           const f = item.fields || {};
           const rawRole = (f.ContractorType || 'client').toLowerCase();
@@ -65,7 +68,7 @@ export default function Kontrahenci() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [context]);
 
   const rows = contractors.filter(c => {
     const matchRole = filter === 'Wszystkie' || c.role === filter;

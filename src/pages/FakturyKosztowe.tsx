@@ -1,5 +1,6 @@
 // Identyczny ekran co FakturySprzedazy — tylko typ "cost"
 import { useState, useEffect, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Upload, Loader2, X, Check, Clock, Search, ChevronRight } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
@@ -20,6 +21,7 @@ function fmt(n: number) {
 }
 
 export default function FakturyKosztowe() {
+  const { context } = useOutletContext<{ lang: any; query: string; context: string }>();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
@@ -38,12 +40,12 @@ export default function FakturyKosztowe() {
 
   const reload = async () => {
     setLoading(true);
-    try { setInvoices(await getInvoices('cost')); }
+    try { setInvoices(await getInvoices('cost', context)); }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, [context]);
 
   const filtered = invoices.filter(inv => {
     if (filter === 'paid' && !inv.paid) return false;
@@ -73,7 +75,7 @@ export default function FakturyKosztowe() {
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
         const data = await processPdfWithAI(base64, 'cost');
         const inv: Invoice = { ...data, type: 'cost', paid: false, lines: data.lines || [], currency: 'PLN' } as Invoice;
-        await saveInvoice(inv);
+        await saveInvoice(inv, context);
         ok++;
         setPdfQueue(q => q.map((item, idx) => idx === i ? { ...item, status: 'done' } : item));
       } catch {
@@ -99,7 +101,7 @@ export default function FakturyKosztowe() {
   }
 
   async function handleSave(inv: Invoice) {
-    await saveInvoice(inv);
+    await saveInvoice(inv, context);
     setShowForm(false); setEditing(null);
     await reload();
   }
@@ -111,7 +113,7 @@ export default function FakturyKosztowe() {
   }
 
   async function togglePaid(inv: Invoice) {
-    await saveInvoice({ ...inv, paid: !inv.paid, paymentDate: !inv.paid ? today : undefined });
+    await saveInvoice({ ...inv, paid: !inv.paid, paymentDate: !inv.paid ? today : undefined }, context);
     await reload();
     setSelected(s => s?.spId === inv.spId ? { ...inv, paid: !inv.paid } : s);
   }
