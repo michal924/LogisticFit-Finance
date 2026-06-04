@@ -12,7 +12,7 @@ export const msalConfig: Configuration = {
 };
 
 export const loginRequest: PopupRequest = {
-  scopes: ['User.Read', 'Sites.ReadWrite.All', 'Sites.Manage.All'],
+  scopes: ['User.Read', 'Sites.ReadWrite.All'],
 };
 
 export const SHAREPOINT_SITE_ID = 'logisticfit.sharepoint.com,d6919769-9612-452f-b698-f9f3296caaca,6cd9f1ba-30f7-474d-8317-baa9693f27c1';

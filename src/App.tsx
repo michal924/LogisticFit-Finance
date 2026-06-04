@@ -1,37 +1,41 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { MsalProvider, useMsal } from '@azure/msal-react';
+import { MsalProvider, useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
 import { msalInstance } from './main';
 import { loginRequest } from './auth/msalConfig';
 import { AppShell } from './components/layout/AppShell';
 
-// Pages (stub — rozbudowane w Fazie 3)
-const Dashboard     = React.lazy(() => import('./pages/Dashboard'));
+const Dashboard        = React.lazy(() => import('./pages/Dashboard'));
 const FakturySprzedazy = React.lazy(() => import('./pages/FakturySprzedazy'));
 const FakturyKosztowe  = React.lazy(() => import('./pages/FakturyKosztowe'));
-const Bank          = React.lazy(() => import('./pages/Bank'));
-const BankPrywatny  = React.lazy(() => import('./pages/BankPrywatny'));
-const Kontrahenci   = React.lazy(() => import('./pages/Kontrahenci'));
-const Koszty        = React.lazy(() => import('./pages/Koszty'));
-const JPK           = React.lazy(() => import('./pages/JPK'));
-const Raporty       = React.lazy(() => import('./pages/Raporty'));
-const Ustawienia    = React.lazy(() => import('./pages/Ustawienia'));
+const Bank             = React.lazy(() => import('./pages/Bank'));
+const BankPrywatny     = React.lazy(() => import('./pages/BankPrywatny'));
+const Kontrahenci      = React.lazy(() => import('./pages/Kontrahenci'));
+const Koszty           = React.lazy(() => import('./pages/Koszty'));
+const JPK              = React.lazy(() => import('./pages/JPK'));
+const Raporty          = React.lazy(() => import('./pages/Raporty'));
+const Ustawienia       = React.lazy(() => import('./pages/Ustawienia'));
 
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const { accounts, instance } = useMsal();
-  if (!accounts.length) {
-    instance.loginRedirect(loginRequest);
-    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Logowanie...</div>;
-  }
-  return <>{children}</>;
+function LoginRedirect() {
+  const { instance } = useMsal();
+  useEffect(() => {
+    instance.loginRedirect(loginRequest).catch(console.error);
+  }, [instance]);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, fontFamily: 'Poppins, sans-serif' }}>
+      <div style={{ width: 40, height: 40, border: '3px solid #3a4d98', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ color: '#3a4d98', fontWeight: 600 }}>Logowanie…</div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
 }
 
 export default function App() {
   return (
     <MsalProvider instance={msalInstance}>
       <BrowserRouter>
-        <AuthGate>
-          <React.Suspense fallback={<div>Ładowanie...</div>}>
+        <AuthenticatedTemplate>
+          <React.Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Ładowanie…</div>}>
             <Routes>
               <Route element={<AppShell />}>
                 <Route index element={<Dashboard />} />
@@ -48,7 +52,10 @@ export default function App() {
               </Route>
             </Routes>
           </React.Suspense>
-        </AuthGate>
+        </AuthenticatedTemplate>
+        <UnauthenticatedTemplate>
+          <LoginRedirect />
+        </UnauthenticatedTemplate>
       </BrowserRouter>
     </MsalProvider>
   );
