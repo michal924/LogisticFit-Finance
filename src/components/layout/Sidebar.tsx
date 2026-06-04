@@ -5,6 +5,17 @@ import { Ico } from '../ui/icons';
 import type { Lang } from '../../i18n';
 import { makeT } from '../../i18n';
 
+// Finance module mark — navy ring + green growth arrow
+function FinanceMark({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="11 11 78 78" fill="none" aria-label="Finance">
+      <path d="M 76.0 29.7 A 33 33 0 1 1 60.2 18.6" stroke="var(--lf-navy)" strokeWidth="9" strokeLinecap="round" />
+      <line x1="34" y1="66" x2="74" y2="26" stroke="var(--lf-green)" strokeWidth="9" strokeLinecap="round" />
+      <polyline points="58 26 76 24 74 42" fill="none" stroke="var(--lf-green)" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const NAV = [
   { section: 'sec.invoices', items: [
     { id: '',            path: '/',                  icon: 'Dashboard',   label: 'nav.dashboard' },
@@ -42,14 +53,14 @@ export function Sidebar({ lang }: { lang: Lang }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <div className="sidebar-logo">
-          <img src="/logo-mark.png" alt="LogisticFit" />
+        <div className="sidebar-logo" style={{ background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <FinanceMark size={26} />
         </div>
         {!collapsed && (
           <>
             <div className="sidebar-brand">
-              <span><strong>Finance</strong></span>
-              <span className="sub">LogisticFit</span>
+              <span style={{ fontWeight: 800, letterSpacing: '-0.02em' }}>Finance</span>
+              <span className="sub"><span style={{ color: 'var(--lf-navy)' }}>Logistic</span><span style={{ color: 'var(--lf-green)' }}>Fit</span></span>
             </div>
             <button className="sidebar-collapse-btn" onClick={() => setSidebarCollapsed(true)} aria-label="Zwiń">
               <Ico name="PanelLeftClose" size={15} />
