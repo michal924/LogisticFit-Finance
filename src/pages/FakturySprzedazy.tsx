@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileUp, Plus, Loader2, X, Check, Clock, Search, ChevronRight } from 'lucide-react';
+import { FileUp, Upload, Loader2, X, Check, Clock, Search, ChevronRight } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
 
 type Filter = 'all' | 'paid' | 'pending' | 'overdue';
+
+type PdfItem = { name: string; status: 'processing' | 'done' | 'error' };
 
 function statusBadge(inv: Invoice) {
   const today = new Date().toISOString().split('T')[0];
@@ -22,10 +24,14 @@ export default function FakturySprzedazy() {
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Invoice | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [pdfQueue, setPdfQueue] = useState<PdfItem[]>([]);
+  const [importSummary, setImportSummary] = useState<{ ok: number; total: number } | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const today = new Date().toISOString().split('T')[0];
 
@@ -44,24 +50,51 @@ export default function FakturySprzedazy() {
     if (filter === 'overdue' && (inv.paid || inv.dueDate >= today)) return false;
     if (search && !inv.counterparty.toLowerCase().includes(search.toLowerCase()) &&
         !inv.number.toLowerCase().includes(search.toLowerCase())) return false;
+    if (dateFrom && inv.issueDate < dateFrom) return false;
+    if (dateTo && inv.issueDate > dateTo) return false;
     return true;
   });
 
   const totalGross = filtered.reduce((s, i) => s + i.grossTotal, 0);
   const totalPaid  = filtered.filter(i => i.paid).reduce((s, i) => s + i.grossTotal, 0);
 
-  async function handlePdf(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPdfError(''); setPdfLoading(true);
-    try {
-      const buffer = await file.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-      const data = await processPdfWithAI(base64, 'sales');
-      setEditing({ ...data, type: 'sales', paid: false, lines: data.lines || [], currency: 'PLN' } as Invoice);
-      setShowForm(true);
-    } catch (err: any) { setPdfError(err.message || 'Błąd odczytu PDF'); }
-    finally { setPdfLoading(false); e.target.value = ''; }
+  async function processFiles(files: File[]) {
+    const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (!pdfs.length) return;
+    setPdfError('');
+    setImportSummary(null);
+    const queue: PdfItem[] = pdfs.map(f => ({ name: f.name, status: 'processing' }));
+    setPdfQueue(queue);
+    let ok = 0;
+    for (let i = 0; i < pdfs.length; i++) {
+      try {
+        const buffer = await pdfs[i].arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const data = await processPdfWithAI(base64, 'sales');
+        const inv: Invoice = { ...data, type: 'sales', paid: false, lines: data.lines || [], currency: 'PLN' } as Invoice;
+        await saveInvoice(inv);
+        ok++;
+        setPdfQueue(q => q.map((item, idx) => idx === i ? { ...item, status: 'done' } : item));
+      } catch {
+        setPdfQueue(q => q.map((item, idx) => idx === i ? { ...item, status: 'error' } : item));
+      }
+    }
+    setImportSummary({ ok, total: pdfs.length });
+    await reload();
+    setTimeout(() => { setPdfQueue([]); }, 3000);
+  }
+
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (files.length) processFiles(files);
+    e.target.value = '';
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) processFiles(files);
   }
 
   async function handleSave(inv: Invoice) {
@@ -94,17 +127,42 @@ export default function FakturySprzedazy() {
               {' · '}opłacone: <strong style={{ color: '#239d46', fontFamily: 'JetBrains Mono, monospace' }}>{fmt(totalPaid)} PLN</strong>
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: '#fff', color: 'var(--accent)', opacity: pdfLoading ? 0.6 : 1, pointerEvents: pdfLoading ? 'none' : 'auto' }}>
-              {pdfLoading ? <Loader2 size={15} /> : <FileUp size={15} />}
-              Importuj PDF
-              <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handlePdf} />
-            </label>
-            <button onClick={() => { setEditing(null); setShowForm(true); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Plus size={15} /> Nowa faktura
-            </button>
-          </div>
         </div>
+
+        {/* Drag & Drop upload */}
+        <div
+          onDrop={handleDrop}
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onClick={() => fileRef.current?.click()}
+          style={{ border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--lf-navy-300, #a0aec0)'}`, borderRadius: 10, padding: 20, textAlign: 'center', cursor: 'pointer', marginBottom: 16, background: dragOver ? 'var(--lf-navy-50, #f0f4ff)' : '#fafbff', transition: 'all .15s' }}
+        >
+          <Upload size={22} color="var(--fg-3)" style={{ marginBottom: 6 }} />
+          <div style={{ fontSize: 13, color: 'var(--fg-2)', fontWeight: 500 }}>Przeciągnij faktury PDF tutaj lub kliknij by wybrać</div>
+          <input ref={fileRef} type="file" accept=".pdf" multiple style={{ display: 'none' }} onChange={handleFileInput} />
+        </div>
+
+        {/* Progress list */}
+        {pdfQueue.length > 0 && (
+          <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {pdfQueue.map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 10px', background: '#f4f6fb', borderRadius: 6 }}>
+                {item.status === 'processing' && <Loader2 size={13} style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }} />}
+                {item.status === 'done' && <Check size={13} color="#239d46" style={{ flexShrink: 0 }} />}
+                {item.status === 'error' && <X size={13} color="#c8362d" style={{ flexShrink: 0 }} />}
+                <span style={{ color: 'var(--fg-2)' }}>{item.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Import summary */}
+        {importSummary && (
+          <div style={{ background: '#f0faf2', border: '1px solid #b7ebc8', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#239d46', fontWeight: 600, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Zaimportowano {importSummary.ok} z {importSummary.total} faktur</span>
+            <button onClick={() => setImportSummary(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#239d46' }}><X size={14} /></button>
+          </div>
+        )}
 
         {pdfError && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#c8362d', marginBottom: 16 }}>{pdfError}</div>}
 
@@ -115,6 +173,11 @@ export default function FakturySprzedazy() {
               {f === 'all' ? 'Wszystkie' : f === 'paid' ? 'Opłacone' : f === 'pending' ? 'Oczekuje' : 'Przeterminowane'}
             </button>
           ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="Od" style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--fg-2)' }} />
+            <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>–</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="Do" style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--fg-2)' }} />
+          </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px' }}>
             <Search size={14} color="var(--fg-3)" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj..." style={{ border: 'none', outline: 'none', fontSize: 13, width: 160, color: 'var(--fg-1)' }} />
@@ -218,6 +281,10 @@ export default function FakturySprzedazy() {
     </div>
   );
 }
+
+// Keep FileUp in scope (used by modal label if needed)
+const _FileUp = FileUp;
+void _FileUp;
 
 function InvoiceModal({ invoice, type, onSave, onClose }: { invoice: Invoice | null; type: 'sales' | 'cost'; onSave: (inv: Invoice) => Promise<void>; onClose: () => void; }) {
   const [saving, setSaving] = useState(false);

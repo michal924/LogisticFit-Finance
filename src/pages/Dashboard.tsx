@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
 import type { Lang } from '../i18n';
@@ -28,6 +29,12 @@ export default function Dashboard() {
   const { lang } = useOutletContext<{ lang: Lang; query: string }>();
   const t = makeT(lang);
 
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+
+  const months = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+
   const kpis = { revenue: 128_400, costs: 82_300, result: 46_100, bank: 214_800, receivables: 38_600, recvOverdue: 12_400, payables: 24_100, payOverdue: 4_800, vatDue: 18_200 };
   const cashflow = [
     { m: 'gru', in: 98, out: 72 }, { m: 'sty', in: 112, out: 85 }, { m: 'lut', in: 105, out: 79 },
@@ -53,10 +60,14 @@ export default function Dashboard() {
     <div>
       <div className="page-h">
         <div><h1>{t('dash.title')}</h1><div className="page-sub">{t('dash.sub')}</div></div>
-        <div className="page-actions">
-          <button className="btn btn-secondary"><Ico name="Download" size={16} />{t('common.export')}</button>
-          <button className="btn btn-primary"><Ico name="Plus" size={16} />{t('inv.newSales')}</button>
-        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+        <select className="select" value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
+          {months.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+        </select>
+        <select className="select" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
+          {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
       </div>
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
