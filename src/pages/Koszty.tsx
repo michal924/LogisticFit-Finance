@@ -89,18 +89,18 @@ export default function Koszty() {
 
   if (loading) {
     return (
-      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
         <div className="spinner" />
-        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Ładowanie kosztów…</span>
+        <span style={{ color: 'var(--fg-3)', fontSize: 14 }}>Ładowanie kosztów…</span>
       </div>
     );
   }
 
   return (
-    <div className="page-content">
-      <div className="page-head">
+    <div>
+      <div className="page-h">
         <div>
-          <h1 className="page-h">Analiza kosztów</h1>
+          <h1>Analiza kosztów</h1>
           <p className="page-sub">Zestawienie i struktura wydatków firmowych</p>
         </div>
         <div className="page-actions">
@@ -115,7 +115,7 @@ export default function Koszty() {
       </div>
 
       <div className="grid cols-4" style={{ marginBottom: '1.5rem' }}>
-        <div className="kpi" style={{ background: 'var(--navy-900)', color: '#fff' }}>
+        <div className="kpi" style={{ background: 'var(--lf-navy-900)', color: '#fff' }}>
           <div className="label" style={{ color: 'rgba(255,255,255,0.6)' }}>Koszty łącznie</div>
           <div className="value" style={{ color: '#fff', fontSize: '1.5rem' }}>{fmt(displayTotal)} <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>PLN</span></div>
           <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginTop: '0.25rem' }}>{MONTHS[parseInt(month)]} {year}</div>
@@ -147,7 +147,7 @@ export default function Koszty() {
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', height: '140px', padding: '0 0.5rem' }}>
               {monthlyData.map((m, i) => (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem', height: '100%', justifyContent: 'flex-end' }}>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
                     {m.value > 0 ? `${Math.round(m.value / 1000)}k` : '0'}
                   </div>
                   <div
@@ -155,12 +155,12 @@ export default function Koszty() {
                       width: '100%',
                       height: `${(m.value / maxMonthly) * 100}%`,
                       minHeight: m.value > 0 ? 2 : 0,
-                      background: i === 5 ? 'var(--navy-900)' : 'var(--navy-200, #c5d0e8)',
+                      background: i === 5 ? 'var(--lf-navy-900)' : 'var(--navy-200, #c5d0e8)',
                       borderRadius: '3px 3px 0 0',
                       transition: 'height 0.3s',
                     }}
                   />
-                  <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>{m.m}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--fg-3)' }}>{m.m}</div>
                 </div>
               ))}
             </div>
@@ -171,14 +171,14 @@ export default function Koszty() {
           <div className="card-head"><span>Struktura kosztów</span></div>
           <div className="card-body">
             {displayCategories.length === 0 ? (
-              <div style={{ color: 'var(--muted)', fontSize: 13 }}>Brak danych dla wybranego okresu</div>
+              <div style={{ color: 'var(--fg-3)', fontSize: 13 }}>Brak danych dla wybranego okresu</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
                 {displayCategories.map((c, i) => (
                   <div key={i}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem', fontSize: '0.82rem' }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{c.name}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{c.pct}%</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-3)' }}>{c.pct}%</span>
                     </div>
                     <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{ width: `${c.pct}%`, height: '100%', background: 'var(--navy-600, #3b5ea6)', borderRadius: 3, transition: 'width 0.3s' }} />
@@ -212,7 +212,7 @@ export default function Koszty() {
                   <tr key={i}>
                     <td style={{ fontWeight: 500 }}>{c.name}</td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(c.amount)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{c.pct}%</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--fg-3)' }}>{c.pct}%</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <div style={{ flex: 1, height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>

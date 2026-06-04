@@ -14,7 +14,7 @@ const ROLE_MAP: Record<string, Role> = {
 };
 
 const ROLE_COLORS: Record<Role, string> = {
-  Klient:   'var(--green-600)',
+  Klient:   'var(--lf-green)',
   Dostawca: 'var(--navy-600, #2d4a8c)',
   Oba:      'var(--amber, #d97706)',
 };
@@ -76,18 +76,18 @@ export default function Kontrahenci() {
 
   if (loading) {
     return (
-      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
         <div className="spinner" />
-        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Ładowanie kontrahentów…</span>
+        <span style={{ color: 'var(--fg-3)', fontSize: 14 }}>Ładowanie kontrahentów…</span>
       </div>
     );
   }
 
   return (
-    <div className="page-content">
-      <div className="page-head">
+    <div>
+      <div className="page-h">
         <div>
-          <h1 className="page-h">Kontrahenci</h1>
+          <h1>Kontrahenci</h1>
           <p className="page-sub">{contractors.length} kontrahentów w bazie</p>
         </div>
         <div className="page-actions">
@@ -151,7 +151,7 @@ export default function Kontrahenci() {
                         <span style={{ fontWeight: 500 }}>{c.name}</span>
                       </div>
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--muted)' }}>{c.nip}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--fg-3)' }}>{c.nip}</td>
                     <td>
                       <span className="badge" style={{ background: `${ROLE_COLORS[c.role]}20`, color: ROLE_COLORS[c.role], border: `1px solid ${ROLE_COLORS[c.role]}40` }}>
                         {c.role}

@@ -21,10 +21,10 @@ export default function Ustawienia() {
   const [apiKey, setApiKey] = useState('sk-ant-api03-••••••••••••••••••••••••••');
 
   return (
-    <div className="page-content">
-      <div className="page-head">
+    <div>
+      <div className="page-h">
         <div>
-          <h1 className="page-h">Ustawienia</h1>
+          <h1>Ustawienia</h1>
           <p className="page-sub">Konfiguracja aplikacji i integracji</p>
         </div>
       </div>
@@ -57,7 +57,7 @@ export default function Ustawienia() {
                 <select value={fiscalYear} onChange={e => setFiscalYear(e.target.value)} style={{ width: '100%', fontSize: '0.9rem' }}>
                   {['2024', '2025', '2026'].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
-                <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.3rem' }}>
+                <p style={{ fontSize: '0.78rem', color: 'var(--fg-3)', marginTop: '0.3rem' }}>
                   Wybierz rok, dla którego wyświetlane są dane finansowe.
                 </p>
               </div>
@@ -136,7 +136,7 @@ export default function Ustawienia() {
               </div>
             </div>
             <div className="card-body">
-              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--fg-3)', marginBottom: '1rem' }}>
                 Klucz API używany do funkcji AI (analiza dokumentów, asystent).
               </p>
               <label style={{ display: 'block', fontWeight: 500, marginBottom: '0.4rem', fontSize: '0.88rem' }}>
@@ -168,16 +168,16 @@ export default function Ustawienia() {
               <div className="int-row">
                 <div className="int-meta">
                   <span style={{ fontWeight: 500 }}>Status połączenia</span>
-                  <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>logisticfit.sharepoint.com</span>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--fg-3)' }}>logisticfit.sharepoint.com</span>
                 </div>
-                <span className="badge" style={{ background: 'var(--green-50, #f0fdf4)', color: 'var(--green-600)', border: '1px solid var(--green-200, #bbf7d0)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <span className="badge" style={{ background: 'var(--lf-green-100)', color: 'var(--lf-green)', border: '1px solid var(--lf-green-300)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <Ico name="CheckCircle" size={13} /> Połączono
                 </span>
               </div>
               <div className="int-row" style={{ marginTop: '1rem' }}>
                 <div className="int-meta">
                   <span style={{ fontWeight: 500 }}>Konto</span>
-                  <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>michal@logisticfit.com</span>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--fg-3)' }}>michal@logisticfit.com</span>
                 </div>
                 <button className="btn"><Ico name="Refresh" size={14} /> Odśwież token</button>
               </div>

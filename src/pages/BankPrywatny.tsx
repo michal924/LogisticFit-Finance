@@ -62,18 +62,18 @@ export default function BankPrywatny() {
 
   if (loading) {
     return (
-      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
         <div className="spinner" />
-        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Ładowanie transakcji…</span>
+        <span style={{ color: 'var(--fg-3)', fontSize: 14 }}>Ładowanie transakcji…</span>
       </div>
     );
   }
 
   return (
-    <div className="page-content">
-      <div className="page-head">
+    <div>
+      <div className="page-h">
         <div>
-          <h1 className="page-h">Bank prywatny</h1>
+          <h1>Bank prywatny</h1>
           <p className="page-sub">Konta osobiste i oszczędnościowe</p>
         </div>
         <div className="page-actions">
@@ -88,7 +88,7 @@ export default function BankPrywatny() {
             className="card"
             style={{
               cursor: 'pointer',
-              border: selected === a.id ? '2px solid var(--navy-900)' : '2px solid transparent',
+              border: selected === a.id ? '2px solid var(--lf-navy-900)' : '2px solid transparent',
               transition: 'border-color 0.15s',
             }}
             onClick={() => setSelected(a.id)}
@@ -97,17 +97,17 @@ export default function BankPrywatny() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: 600, marginBottom: '0.2rem' }}>{a.label}</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{a.bank}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--fg-3)' }}>{a.bank}</div>
                 </div>
-                {selected === a.id && <Ico name="CheckCircle" size={18} style={{ color: 'var(--navy-900)' }} />}
+                {selected === a.id && <Ico name="CheckCircle" size={18} style={{ color: 'var(--lf-navy-900)' }} />}
               </div>
               <div style={{ marginTop: '0.75rem', fontFamily: 'var(--font-mono)', fontSize: '1.15rem', fontWeight: 700 }}>
-                {fmt(getBalanceForAccount(a.id))} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--muted)' }}>PLN</span>
+                {fmt(getBalanceForAccount(a.id))} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--fg-3)' }}>PLN</span>
               </div>
               <div style={{ marginTop: '0.75rem' }}>
                 <button
                   className="btn"
-                  style={{ fontSize: '0.75rem', color: 'var(--red, #e53e3e)', borderColor: 'var(--red, #e53e3e)' }}
+                  style={{ fontSize: '0.75rem', color: 'var(--lf-danger)', borderColor: 'var(--lf-danger)' }}
                   onClick={e => { e.stopPropagation(); }}
                 >
                   <Ico name="Trash" size={13} /> Wyczyść konto
@@ -121,7 +121,7 @@ export default function BankPrywatny() {
       <div className="card">
         <div className="card-head">
           <span>Transakcje · {acct.label}</span>
-          <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>{rows.length} rekordów</span>
+          <span style={{ fontSize: '0.82rem', color: 'var(--fg-3)' }}>{rows.length} rekordów</span>
         </div>
         <div className="card-body" style={{ padding: 0 }}>
           <div className="table-wrap">
@@ -141,16 +141,16 @@ export default function BankPrywatny() {
                 )}
                 {rows.map((r, i) => (
                   <tr key={i}>
-                    <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: '0.82rem' }}>{r.date}</td>
+                    <td style={{ whiteSpace: 'nowrap', color: 'var(--fg-3)', fontSize: '0.82rem' }}>{r.date}</td>
                     <td>{r.title}</td>
-                    <td style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{r.contractor}</td>
+                    <td style={{ color: 'var(--fg-3)', fontSize: '0.85rem' }}>{r.contractor}</td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                      <span style={{ color: r.dir === 'in' ? 'var(--green-600)' : 'var(--red, #e53e3e)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                      <span style={{ color: r.dir === 'in' ? 'var(--lf-green)' : 'var(--lf-danger)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         <Ico name={r.dir === 'in' ? 'TrendUp' : 'TrendDown'} size={13} />
                         {r.dir === 'in' ? '+' : ''}{fmt(r.amount)}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', color: 'var(--muted)' }}>{fmt(r.balance)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', color: 'var(--fg-3)' }}>{fmt(r.balance)}</td>
                   </tr>
                 ))}
               </tbody>

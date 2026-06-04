@@ -25,10 +25,10 @@ export default function Raporty() {
   const vatNaliczony = current ? Math.round(current.costs * 0.23) : 0;
 
   return (
-    <div className="page-content">
-      <div className="page-head">
+    <div>
+      <div className="page-h">
         <div>
-          <h1 className="page-h">Raporty finansowe</h1>
+          <h1>Raporty finansowe</h1>
           <p className="page-sub">Zestawienie przychodów, kosztów i zobowiązań VAT</p>
         </div>
         <div className="page-actions">
@@ -45,7 +45,7 @@ export default function Raporty() {
       <div className="grid cols-4" style={{ marginBottom: '1.5rem', gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <div className="kpi">
           <div className="label"><span className="ico"><Ico name="TrendUp" size={15} /></span>Przychody</div>
-          <div className="value" style={{ color: 'var(--green-600)' }}>{current ? fmt(current.revenue) : '—'} <span className="unit">PLN</span></div>
+          <div className="value" style={{ color: 'var(--lf-green)' }}>{current ? fmt(current.revenue) : '—'} <span className="unit">PLN</span></div>
           {current && prev && (
             <div className="delta" data-dir={current.revenue >= prev.revenue ? 'up' : 'down'}>
               <Ico name={current.revenue >= prev.revenue ? 'TrendUp' : 'TrendDown'} size={14} />
@@ -55,7 +55,7 @@ export default function Raporty() {
         </div>
         <div className="kpi">
           <div className="label"><span className="ico"><Ico name="TrendDown" size={15} /></span>Koszty</div>
-          <div className="value" style={{ color: 'var(--red, #e53e3e)' }}>{current ? fmt(current.costs) : '—'} <span className="unit">PLN</span></div>
+          <div className="value" style={{ color: 'var(--lf-danger)' }}>{current ? fmt(current.costs) : '—'} <span className="unit">PLN</span></div>
           {current && prev && (
             <div className="delta" data-dir={current.costs <= prev.costs ? 'up' : 'down'}>
               <Ico name={current.costs <= prev.costs ? 'TrendUp' : 'TrendDown'} size={14} />
@@ -63,7 +63,7 @@ export default function Raporty() {
             </div>
           )}
         </div>
-        <div className="kpi" style={{ background: 'var(--navy-900)', color: '#fff' }}>
+        <div className="kpi" style={{ background: 'var(--lf-navy-900)', color: '#fff' }}>
           <div className="label" style={{ color: 'rgba(255,255,255,0.6)' }}>Wynik netto</div>
           <div className="value" style={{ color: '#fff', fontSize: '1.35rem' }}>{current ? fmt(current.result) : '—'} <span style={{ fontSize: '0.82rem', opacity: 0.7 }}>PLN</span></div>
           <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.2rem' }}>marża {current ? ((current.result / current.revenue) * 100).toFixed(1) : '—'}%</div>
@@ -101,10 +101,10 @@ export default function Raporty() {
                   return (
                     <tr key={i} style={i === parseInt(selMonth) ? { background: 'var(--navy-50, #f0f4fb)' } : {}}>
                       <td style={{ fontWeight: i === parseInt(selMonth) ? 600 : 400 }}>{r.month}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--green-600)', fontWeight: 600 }}>{fmt(r.revenue)}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--red, #e53e3e)' }}>{fmt(r.costs)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--lf-green)', fontWeight: 600 }}>{fmt(r.revenue)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--lf-danger)' }}>{fmt(r.costs)}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{fmt(r.result)}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{margin}%</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--fg-3)' }}>{margin}%</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmt(r.vatDue)}</td>
                     </tr>
                   );
@@ -113,8 +113,8 @@ export default function Raporty() {
               <tfoot>
                 <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
                   <td>Suma YTD</td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--green-600)' }}>{fmt(REPORT_DATA.reduce((s, r) => s + r.revenue, 0))}</td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--red, #e53e3e)' }}>{fmt(REPORT_DATA.reduce((s, r) => s + r.costs, 0))}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--lf-green)' }}>{fmt(REPORT_DATA.reduce((s, r) => s + r.revenue, 0))}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--lf-danger)' }}>{fmt(REPORT_DATA.reduce((s, r) => s + r.costs, 0))}</td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmt(REPORT_DATA.reduce((s, r) => s + r.result, 0))}</td>
                   <td></td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmt(REPORT_DATA.reduce((s, r) => s + r.vatDue, 0))}</td>

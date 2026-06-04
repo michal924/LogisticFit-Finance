@@ -13,10 +13,10 @@ const STATUS_LABELS: Record<JpkStatus, string> = {
 };
 
 const STATUS_COLORS: Record<JpkStatus, { bg: string; color: string }> = {
-  sent:       { bg: 'var(--green-50, #f0fdf4)',  color: 'var(--green-600)' },
-  processing: { bg: 'var(--blue-50, #eff6ff)',   color: 'var(--blue-600, #2563eb)' },
-  error:      { bg: 'var(--red-50, #fef2f2)',    color: 'var(--red-600, #dc2626)' },
-  draft:      { bg: 'var(--gray-100, #f3f4f6)',  color: 'var(--gray-500, #6b7280)' },
+  sent:       { bg: 'var(--lf-green-100)',  color: 'var(--lf-green)' },
+  processing: { bg: 'var(--lf-navy-100)',   color: 'var(--lf-navy)' },
+  error:      { bg: 'var(--lf-danger-bg)',    color: 'var(--lf-danger)' },
+  draft:      { bg: 'var(--lf-slate-100)',  color: 'var(--fg-3)' },
 };
 
 const STATUS_MAP: Record<string, JpkStatus> = {
@@ -66,18 +66,18 @@ export default function JPK() {
 
   if (loading) {
     return (
-      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
         <div className="spinner" />
-        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Ładowanie JPK…</span>
+        <span style={{ color: 'var(--fg-3)', fontSize: 14 }}>Ładowanie JPK…</span>
       </div>
     );
   }
 
   return (
-    <div className="page-content">
-      <div className="page-head">
+    <div>
+      <div className="page-h">
         <div>
-          <h1 className="page-h">JPK_V7</h1>
+          <h1>JPK_V7</h1>
           <p className="page-sub">Jednolity Plik Kontrolny · deklaracje VAT</p>
         </div>
         <div className="page-actions">
@@ -87,7 +87,7 @@ export default function JPK() {
       </div>
 
       <div className="grid cols-3" style={{ marginBottom: '1.5rem' }}>
-        <div className="kpi" style={{ background: 'var(--navy-900)', color: '#fff' }}>
+        <div className="kpi" style={{ background: 'var(--lf-navy-900)', color: '#fff' }}>
           <div className="label" style={{ color: 'rgba(255,255,255,0.6)' }}>Bieżący okres</div>
           <div className="value" style={{ color: '#fff', fontSize: '1.2rem' }}>{currentDraft?.period ?? '—'}</div>
           <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.2rem' }}>termin: 25. następnego miesiąca</div>
@@ -129,8 +129,8 @@ export default function JPK() {
                     <tr key={i}>
                       <td style={{ fontWeight: 500 }}>{r.period}</td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{r.type}</td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--muted)' }}>{r.fileName}</td>
-                      <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{r.uploadDate}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--fg-3)' }}>{r.fileName}</td>
+                      <td style={{ color: 'var(--fg-3)', fontSize: '0.82rem' }}>{r.uploadDate}</td>
                       <td>
                         <span className="badge" style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.color}40` }}>
                           {STATUS_LABELS[r.status]}
