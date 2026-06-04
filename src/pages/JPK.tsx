@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react';
 import { Ico } from '../components/ui/icons';
 import { JPKService } from '../services/graphService';
 
-function fmt(n: number) {
-  return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
 
 type JpkStatus = 'sent' | 'processing' | 'error' | 'draft';
 
