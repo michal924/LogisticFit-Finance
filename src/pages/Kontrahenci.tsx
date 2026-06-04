@@ -1,18 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Ico } from '../components/ui/icons';
+import { ContractorsService } from '../services/graphService';
 
 type Role = 'Klient' | 'Dostawca' | 'Oba';
 
-const CONTRACTORS: { name: string; nip: string; role: Role; initials: string; invoices: number; turnover: number; lastDoc: string }[] = [
-  { name: 'Pol-Trans Sp. z o.o.',       nip: '123-456-78-90', role: 'Klient',   initials: 'PT', invoices: 24, turnover: 287400, lastDoc: '2026-06-02' },
-  { name: 'LogiGroup S.A.',             nip: '987-654-32-10', role: 'Klient',   initials: 'LG', invoices: 18, turnover: 198600, lastDoc: '2026-06-01' },
-  { name: 'TechDist Polska Sp. z o.o.', nip: '456-789-01-23', role: 'Oba',      initials: 'TD', invoices: 31, turnover: 156800, lastDoc: '2026-05-31' },
-  { name: 'Cargo Express',              nip: '321-098-76-54', role: 'Klient',   initials: 'CE', invoices: 12, turnover: 142300, lastDoc: '2026-05-29' },
-  { name: 'MedLogistics Sp. z o.o.',    nip: '654-321-09-87', role: 'Klient',   initials: 'ML', invoices: 9,  turnover: 98700,  lastDoc: '2026-05-27' },
-  { name: 'PKN Orlen S.A.',             nip: '777-00-33-382', role: 'Dostawca', initials: 'OR', invoices: 48, turnover: 74200,  lastDoc: '2026-06-02' },
-  { name: 'Biuro Premium Sp. z o.o.',   nip: '556-123-44-11', role: 'Dostawca', initials: 'BP', invoices: 14, turnover: 54000,  lastDoc: '2026-06-01' },
-  { name: 'Microsoft Ireland Ltd.',     nip: 'EU-826-012-448',role: 'Dostawca', initials: 'MS', invoices: 6,  turnover: 14760,  lastDoc: '2026-05-30' },
-];
+const ROLE_MAP: Record<string, Role> = {
+  client: 'Klient',
+  vendor: 'Dostawca',
+  both:   'Oba',
+  klient:  'Klient',
+  dostawca: 'Dostawca',
+  oba:     'Oba',
+};
 
 const ROLE_COLORS: Record<Role, string> = {
   Klient:   'var(--green-600)',
@@ -27,23 +26,69 @@ function fmt(n: number) {
 type Filter = 'Wszystkie' | Role;
 const FILTERS: Filter[] = ['Wszystkie', 'Klient', 'Dostawca', 'Oba'];
 
+type Contractor = {
+  name: string;
+  nip: string;
+  role: Role;
+  initials: string;
+  invoices: number;
+  totalNet: number;
+  totalGross: number;
+};
+
 export default function Kontrahenci() {
   const [filter, setFilter] = useState<Filter>('Wszystkie');
   const [search, setSearch] = useState('');
+  const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const rows = CONTRACTORS.filter(c => {
+  useEffect(() => {
+    ContractorsService.getAll()
+      .then((items: any[]) => {
+        const mapped: Contractor[] = items.map(item => {
+          const f = item.fields || {};
+          const rawRole = (f.ContractorType || 'client').toLowerCase();
+          const role: Role = ROLE_MAP[rawRole] ?? 'Klient';
+          const name = f.ContractorName || '';
+          return {
+            name,
+            nip: f.NIP || '—',
+            role,
+            initials: name.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || '??',
+            invoices: f.InvoiceCount ?? 0,
+            totalNet: f.TotalNet ?? 0,
+            totalGross: f.TotalGross ?? 0,
+          };
+        });
+        mapped.sort((a, b) => b.totalGross - a.totalGross);
+        setContractors(mapped);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const rows = contractors.filter(c => {
     const matchRole = filter === 'Wszystkie' || c.role === filter;
     const q = search.toLowerCase();
     const matchSearch = !q || c.name.toLowerCase().includes(q) || c.nip.includes(q);
     return matchRole && matchSearch;
   });
 
+  if (loading) {
+    return (
+      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+        <div className="spinner" />
+        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Ładowanie kontrahentów…</span>
+      </div>
+    );
+  }
+
   return (
     <div className="page-content">
       <div className="page-head">
         <div>
           <h1 className="page-h">Kontrahenci</h1>
-          <p className="page-sub">{CONTRACTORS.length} kontrahentów w bazie</p>
+          <p className="page-sub">{contractors.length} kontrahentów w bazie</p>
         </div>
         <div className="page-actions">
           <button className="btn btn-primary"><Ico name="Plus" size={15} /> Nowy kontrahent</button>
@@ -84,8 +129,8 @@ export default function Kontrahenci() {
                   <th>NIP</th>
                   <th>Rola</th>
                   <th style={{ textAlign: 'center' }}>Faktury</th>
-                  <th style={{ textAlign: 'right' }}>Obrót (PLN)</th>
-                  <th>Ostatni dok.</th>
+                  <th style={{ textAlign: 'right' }}>Obrót netto (PLN)</th>
+                  <th style={{ textAlign: 'right' }}>Obrót brutto (PLN)</th>
                   <th></th>
                 </tr>
               </thead>
@@ -113,8 +158,8 @@ export default function Kontrahenci() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)' }}>{c.invoices}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(c.turnover)}</td>
-                    <td style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>{c.lastDoc}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmt(c.totalNet)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(c.totalGross)}</td>
                     <td>
                       <button className="btn" style={{ padding: '0.25rem 0.5rem' }}><Ico name="Eye" size={14} /></button>
                     </td>

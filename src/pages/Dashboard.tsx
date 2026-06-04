@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
 import type { Lang } from '../i18n';
 import { makeT } from '../i18n';
+import { getInvoices } from '../services/invoiceService';
+import { TransactionsService } from '../services/graphService';
+import type { Invoice } from '../types';
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -25,6 +28,8 @@ function KpiCard({ label, icon, value, unit, delta, dir }: {
   );
 }
 
+const MONTH_SHORT = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
+
 export default function Dashboard() {
   const { lang } = useOutletContext<{ lang: Lang; query: string }>();
   const t = makeT(lang);
@@ -35,26 +40,143 @@ export default function Dashboard() {
 
   const months = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
 
-  const kpis = { revenue: 128_400, costs: 82_300, result: 46_100, bank: 214_800, receivables: 38_600, recvOverdue: 12_400, payables: 24_100, payOverdue: 4_800, vatDue: 18_200 };
-  const cashflow = [
-    { m: 'gru', in: 98, out: 72 }, { m: 'sty', in: 112, out: 85 }, { m: 'lut', in: 105, out: 79 },
-    { m: 'mar', in: 118, out: 88 }, { m: 'kwi', in: 122, out: 91 }, { m: 'maj', in: 128, out: 82 },
-  ];
-  const maxCF = Math.max(...cashflow.flatMap(d => [d.in, d.out]));
-  const activity = [
-    { icon: 'CheckCircle', tone: 'success', text: 'Opłacono fakturę', val: 'FV/2026/089', ts: '2 min temu' },
-    { icon: 'FileText',    tone: 'info',    text: 'Nowa faktura kosztowa', val: 'FC/2026/041', ts: '1 godz. temu' },
-    { icon: 'AlertTriangle', tone: 'danger', text: 'Przeterminowana płatność', val: 'FV/2026/071', ts: '2 godz. temu' },
-    { icon: 'Bank',        tone: 'neutral', text: 'Import wyciągu bankowego', val: '47 transakcji', ts: 'wczoraj' },
-    { icon: 'ShieldCheck', tone: 'neutral', text: 'Wygenerowano JPK_V7M', val: 'kwiecień 2026', ts: 'wczoraj' },
-  ];
-  const topC = [
-    { name: 'Pol-Trans Sp. z o.o.', nip: '123-456-78-90', value: 38_400 },
-    { name: 'LogiGroup S.A.',       nip: '987-654-32-10', value: 29_800 },
-    { name: 'TechDist Polska',      nip: '456-789-01-23', value: 22_100 },
-    { name: 'Cargo Express',        nip: '321-098-76-54', value: 18_900 },
-    { name: 'MedLogistics',         nip: '654-321-09-87', value: 14_200 },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [salesInvoices, setSalesInvoices] = useState<Invoice[]>([]);
+  const [costInvoices, setCostInvoices] = useState<Invoice[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      getInvoices('sales'),
+      getInvoices('cost'),
+      TransactionsService.getAll(),
+    ])
+      .then(([sales, costs, txns]) => {
+        setSalesInvoices(sales);
+        setCostInvoices(costs);
+        setTransactions(txns);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Compute KPIs for selected month/year
+  const monthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+
+  const revenue = salesInvoices
+    .filter(i => i.issueDate?.startsWith(monthStr))
+    .reduce((s, i) => s + (i.netTotal || 0), 0);
+
+  const costs = costInvoices
+    .filter(i => i.issueDate?.startsWith(monthStr))
+    .reduce((s, i) => s + (i.netTotal || 0), 0);
+
+  const result = revenue - costs;
+
+  // Bank balance: last transaction balance
+  const sortedTxns = [...transactions].sort((a, b) => {
+    const da = a.fields?.TransactionDate || '';
+    const db = b.fields?.TransactionDate || '';
+    return db.localeCompare(da);
+  });
+  const bankBalance = sortedTxns[0]?.fields?.Balance ?? 0;
+  const latestTxnDate = sortedTxns[0]?.fields?.TransactionDate?.split('T')[0] ?? '';
+
+  // Receivables / Payables
+  const today = new Date().toISOString().split('T')[0];
+  const receivables = salesInvoices.filter(i => !i.paid).reduce((s, i) => s + (i.grossTotal || 0), 0);
+  const recvOverdue = salesInvoices.filter(i => !i.paid && i.dueDate < today).reduce((s, i) => s + (i.grossTotal || 0), 0);
+  const payables = costInvoices.filter(i => !i.paid).reduce((s, i) => s + (i.grossTotal || 0), 0);
+  const payOverdue = costInvoices.filter(i => !i.paid && i.dueDate < today).reduce((s, i) => s + (i.grossTotal || 0), 0);
+  const vatDue = costInvoices.filter(i => !i.paid).reduce((s, i) => s + (i.vatTotal || 0), 0);
+
+  // Top contractors: group sales by counterparty
+  const contractorMap = new Map<string, number>();
+  salesInvoices.forEach(i => {
+    const key = i.counterparty || 'Nieznany';
+    contractorMap.set(key, (contractorMap.get(key) || 0) + (i.grossTotal || 0));
+  });
+  const topC = Array.from(contractorMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, value]) => {
+      const inv = salesInvoices.find(i => i.counterparty === name);
+      return { name, nip: inv?.nip || '—', value };
+    });
+
+  // Activity: last 5 invoices + transactions
+  const activityItems: { icon: string; tone: string; text: string; val: string; ts: string; date: string }[] = [];
+
+  salesInvoices.slice(0, 5).forEach(i => {
+    activityItems.push({
+      icon: i.paid ? 'CheckCircle' : 'FileText',
+      tone: i.paid ? 'success' : 'info',
+      text: i.paid ? 'Opłacona faktura sprzedaży' : 'Nowa faktura sprzedaży',
+      val: i.number,
+      ts: i.issueDate,
+      date: i.issueDate,
+    });
+  });
+
+  costInvoices.slice(0, 5).forEach(i => {
+    const overdue = !i.paid && i.dueDate < today;
+    activityItems.push({
+      icon: overdue ? 'AlertTriangle' : 'FileText',
+      tone: overdue ? 'danger' : 'info',
+      text: overdue ? 'Przeterminowana faktura kosztowa' : 'Nowa faktura kosztowa',
+      val: i.number,
+      ts: i.issueDate,
+      date: i.issueDate,
+    });
+  });
+
+  const activity = activityItems
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
+
+  // Cashflow: last 6 months from transactions
+  const cfMonths: { m: string; in: number; out: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = MONTH_SHORT[d.getMonth()];
+    let inflow = 0;
+    let outflow = 0;
+    transactions.forEach(t => {
+      const f = t.fields || {};
+      const txDate = (f.TransactionDate || '').substring(0, 7);
+      if (txDate === key) {
+        const amt = f.Amount || 0;
+        const type = (f.TransactionType || '').toLowerCase();
+        if (type === 'credit' || amt > 0) inflow += Math.abs(amt);
+        else outflow += Math.abs(amt);
+      }
+    });
+    // Fallback to invoices if no transactions
+    if (inflow === 0 && outflow === 0) {
+      inflow = salesInvoices
+        .filter(inv => inv.issueDate?.startsWith(key))
+        .reduce((s, inv) => s + (inv.grossTotal || 0), 0) / 1000;
+      outflow = costInvoices
+        .filter(inv => inv.issueDate?.startsWith(key))
+        .reduce((s, inv) => s + (inv.grossTotal || 0), 0) / 1000;
+    } else {
+      inflow = inflow / 1000;
+      outflow = outflow / 1000;
+    }
+    cfMonths.push({ m: label, in: inflow, out: outflow });
+  }
+  const maxCF = Math.max(...cfMonths.flatMap(d => [d.in, d.out]), 1);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+        <div className="spinner" />
+        <span style={{ color: 'var(--fg-3)', fontSize: 14 }}>Ładowanie danych…</span>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -71,10 +193,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
-        <KpiCard icon="TrendUp"  label={t('dash.revenue')}     value={fmt(kpis.revenue)}  unit="PLN" delta="+13,8%" dir="up" />
-        <KpiCard icon="Receipt"  label={t('dash.costs')}       value={fmt(kpis.costs)}    unit="PLN" delta="+4,1%"  dir="down" />
-        <KpiCard icon="Coins"    label={t('dash.result')}      value={fmt(kpis.result)}   unit="PLN" delta="+18,2%" dir="up" />
-        <KpiCard icon="Bank"     label={t('dash.bankBalance')} value={fmt(kpis.bank)}     unit="PLN" delta="+6,5%"  dir="up" />
+        <KpiCard icon="TrendUp"  label={t('dash.revenue')}     value={fmt(revenue)}      unit="PLN" />
+        <KpiCard icon="Receipt"  label={t('dash.costs')}       value={fmt(costs)}         unit="PLN" />
+        <KpiCard icon="Coins"    label={t('dash.result')}      value={fmt(result)}        unit="PLN" />
+        <KpiCard icon="Bank"     label={t('dash.bankBalance')} value={fmt(bankBalance)}   unit="PLN" delta={latestTxnDate ? `stan: ${latestTxnDate}` : undefined} dir="up" />
       </div>
 
       <div className="grid split-2-1" style={{ marginBottom: 16 }}>
@@ -92,8 +214,8 @@ export default function Dashboard() {
               <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>tys. PLN</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0, height: 160 }}>
-              {cashflow.map((d, i) => {
-                const isLast = i === cashflow.length - 1;
+              {cfMonths.map((d, i) => {
+                const isLast = i === cfMonths.length - 1;
                 return (
                   <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%' }}>
                     <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 3, width: '100%', justifyContent: 'center' }}>
@@ -113,8 +235,8 @@ export default function Dashboard() {
           <div className="card-body">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {[
-                { label: t('dash.receivables'), value: kpis.receivables, overdue: kpis.recvOverdue, pct: 100, color: 'var(--lf-navy)' },
-                { label: t('dash.payables'),    value: kpis.payables,    overdue: kpis.payOverdue,  pct: Math.round(kpis.payables / kpis.receivables * 100), color: 'var(--lf-green)' },
+                { label: t('dash.receivables'), value: receivables, overdue: recvOverdue, pct: 100, color: 'var(--lf-navy)' },
+                { label: t('dash.payables'),    value: payables,    overdue: payOverdue,  pct: receivables > 0 ? Math.round(payables / receivables * 100) : 100, color: 'var(--lf-green)' },
               ].map(r => (
                 <div key={r.label}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -122,7 +244,7 @@ export default function Dashboard() {
                     <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14 }}>{fmt(r.value)} zł</span>
                   </div>
                   <div style={{ height: 4, background: 'var(--lf-slate-100)', borderRadius: 999, overflow: 'hidden', margin: '4px 0' }}>
-                    <div style={{ width: `${r.pct}%`, height: '100%', background: r.color, borderRadius: 999 }} />
+                    <div style={{ width: `${Math.min(r.pct, 100)}%`, height: '100%', background: r.color, borderRadius: 999 }} />
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--lf-danger)', marginTop: 4 }}>
                     {t('dash.recvOverdue')}: {fmt(r.overdue)} zł
@@ -136,7 +258,7 @@ export default function Dashboard() {
                   </span>
                   <div>
                     <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>{t('dash.vat')}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16 }}>{fmt(kpis.vatDue)} zł</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16 }}>{fmt(vatDue)} zł</div>
                   </div>
                 </div>
                 <button className="btn btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }}>JPK_V7</button>
@@ -151,6 +273,9 @@ export default function Dashboard() {
           <div className="card-head"><div><h3>{t('dash.activity')}</h3></div></div>
           <div className="card-body" style={{ padding: 0 }}>
             <div className="activity">
+              {activity.length === 0 && (
+                <div style={{ padding: '1rem 1.25rem', color: 'var(--fg-3)', fontSize: 13 }}>Brak aktywności</div>
+              )}
               {activity.map((a, i) => (
                 <div key={i} className="activity-row" data-tone={a.tone}>
                   <div className="dot-col"><Ico name={a.icon} size={15} /></div>
@@ -165,6 +290,9 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-head"><div><h3>{t('dash.topContractors')}</h3></div><button className="icon-btn"><Ico name="ArrowUpRight" size={15} /></button></div>
           <div className="card-body" style={{ padding: '8px 0' }}>
+            {topC.length === 0 && (
+              <div style={{ padding: '1rem 1.25rem', color: 'var(--fg-3)', fontSize: 13 }}>Brak danych</div>
+            )}
             {topC.map((c, i) => (
               <div key={i} className="int-row" style={{ padding: '10px 20px', borderTopColor: i === 0 ? 'transparent' : 'var(--lf-slate-200)' }}>
                 <span className="avatar sm" data-color="navy">{c.name.slice(0, 2).toUpperCase()}</span>

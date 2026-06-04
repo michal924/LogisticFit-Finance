@@ -1,56 +1,73 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Ico } from '../components/ui/icons';
+import { PrivateTransactionsService } from '../services/graphService';
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-type Account = 'gotowka' | 'dom' | 'oszczednosci' | 'tarnograd';
+type AccountId = 'cash' | 'home' | 'savings' | 'tarnogrod';
 
-const ACCOUNTS: { id: Account; label: string; balance: number; bank: string }[] = [
-  { id: 'gotowka',     label: 'Gotówka',     balance: 3200.00,   bank: 'Portfel / Kasa' },
-  { id: 'dom',         label: 'Dom',          balance: 18450.00,  bank: 'PKO BP · PL 61 1020 5226' },
-  { id: 'oszczednosci',label: 'Oszczędności', balance: 87300.00,  bank: 'ING · PL 20 1050 1025' },
-  { id: 'tarnograd',   label: 'Tarnogród',    balance: 5600.00,   bank: 'Konto lokalne' },
+const ACCOUNTS: { id: AccountId; label: string; bank: string }[] = [
+  { id: 'cash',      label: 'Gotówka',     bank: 'Portfel / Kasa' },
+  { id: 'home',      label: 'Dom',          bank: 'PKO BP · PL 61 1020 5226' },
+  { id: 'savings',   label: 'Oszczędności', bank: 'ING · PL 20 1050 1025' },
+  { id: 'tarnogrod', label: 'Tarnogród',    bank: 'Konto lokalne' },
 ];
 
 type Txn = { date: string; title: string; contractor: string; amount: number; balance: number; dir: 'in' | 'out' };
 
-const DATA: Record<Account, Txn[]> = {
-  gotowka: [
-    { date: '2026-06-02', title: 'Wypłata ATM', contractor: 'PKO BP ATM', amount: -500.00, balance: 3200.00, dir: 'out' },
-    { date: '2026-05-28', title: 'Zakupy spożywcze', contractor: 'Biedronka', amount: -142.30, balance: 3700.00, dir: 'out' },
-    { date: '2026-05-25', title: 'Wypłata ATM', contractor: 'Santander ATM', amount: -300.00, balance: 3842.30, dir: 'out' },
-    { date: '2026-05-20', title: 'Depozyt gotówki', contractor: 'Własny', amount: 800.00, balance: 4142.30, dir: 'in' },
-  ],
-  dom: [
-    { date: '2026-06-01', title: 'Czynsz za czerwiec', contractor: 'Spółdzielnia Mieszkaniowa', amount: -1200.00, balance: 18450.00, dir: 'out' },
-    { date: '2026-05-30', title: 'Prąd – maj 2026', contractor: 'PGE Obrót S.A.', amount: -287.50, balance: 19650.00, dir: 'out' },
-    { date: '2026-05-29', title: 'Gaz – maj 2026', contractor: 'PGNiG Obrót', amount: -183.20, balance: 19937.50, dir: 'out' },
-    { date: '2026-05-25', title: 'Wynagrodzenie', contractor: 'LogisticFit Sp. z o.o.', amount: 8500.00, balance: 20120.70, dir: 'in' },
-    { date: '2026-05-22', title: 'Internet domowy', contractor: 'UPC Polska', amount: -89.00, balance: 11620.70, dir: 'out' },
-    { date: '2026-05-20', title: 'Ubezpieczenie mieszkania', contractor: 'Allianz Polska', amount: -320.00, balance: 11709.70, dir: 'out' },
-  ],
-  oszczednosci: [
-    { date: '2026-06-01', title: 'Przelew z konta Dom', contractor: 'Własny', amount: 2000.00, balance: 87300.00, dir: 'in' },
-    { date: '2026-05-01', title: 'Przelew z konta Dom', contractor: 'Własny', amount: 2000.00, balance: 85300.00, dir: 'in' },
-    { date: '2026-04-01', title: 'Przelew z konta Dom', contractor: 'Własny', amount: 2000.00, balance: 83300.00, dir: 'in' },
-    { date: '2026-03-15', title: 'Odsetki od lokaty', contractor: 'ING Bank Śląski', amount: 412.50, balance: 81300.00, dir: 'in' },
-    { date: '2026-03-01', title: 'Przelew z konta Dom', contractor: 'Własny', amount: 2000.00, balance: 80887.50, dir: 'in' },
-  ],
-  tarnograd: [
-    { date: '2026-05-30', title: 'Wypłata', contractor: 'Tarnogród ATM', amount: -200.00, balance: 5600.00, dir: 'out' },
-    { date: '2026-05-15', title: 'Przelew przychodzący', contractor: 'Własny', amount: 1000.00, balance: 5800.00, dir: 'in' },
-    { date: '2026-04-30', title: 'Opłaty lokalne', contractor: 'Gmina Tarnogród', amount: -150.00, balance: 4800.00, dir: 'out' },
-    { date: '2026-04-15', title: 'Przelew przychodzący', contractor: 'Własny', amount: 500.00, balance: 4950.00, dir: 'in' },
-  ],
-};
-
 export default function BankPrywatny() {
-  const [selected, setSelected] = useState<Account>('dom');
+  const [selected, setSelected] = useState<AccountId>('home');
+  const [allTxns, setAllTxns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const rows = DATA[selected];
+  useEffect(() => {
+    PrivateTransactionsService.getAll()
+      .then((items: any[]) => setAllTxns(items))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  function getTxnsForAccount(accountId: AccountId): Txn[] {
+    return allTxns
+      .filter(item => {
+        const acc = (item.fields?.Account || '').toLowerCase();
+        return acc === accountId;
+      })
+      .map(item => {
+        const f = item.fields || {};
+        const amount = f.Amount ?? 0;
+        const type = (f.TransactionType || '').toLowerCase();
+        const dir: 'in' | 'out' = (type === 'credit' || amount > 0) ? 'in' : 'out';
+        return {
+          date: (f.TransactionDate || '').split('T')[0],
+          title: f.Description || '',
+          contractor: f.Contractor || '',
+          amount,
+          balance: f.Balance ?? 0,
+          dir,
+        };
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function getBalanceForAccount(accountId: AccountId): number {
+    const txns = getTxnsForAccount(accountId);
+    return txns[0]?.balance ?? 0;
+  }
+
   const acct = ACCOUNTS.find(a => a.id === selected)!;
+  const rows = getTxnsForAccount(selected);
+
+  if (loading) {
+    return (
+      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+        <div className="spinner" />
+        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Ładowanie transakcji…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="page-content">
@@ -85,7 +102,7 @@ export default function BankPrywatny() {
                 {selected === a.id && <Ico name="CheckCircle" size={18} style={{ color: 'var(--navy-900)' }} />}
               </div>
               <div style={{ marginTop: '0.75rem', fontFamily: 'var(--font-mono)', fontSize: '1.15rem', fontWeight: 700 }}>
-                {fmt(a.balance)} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--muted)' }}>PLN</span>
+                {fmt(getBalanceForAccount(a.id))} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--muted)' }}>PLN</span>
               </div>
               <div style={{ marginTop: '0.75rem' }}>
                 <button
@@ -119,6 +136,9 @@ export default function BankPrywatny() {
                 </tr>
               </thead>
               <tbody>
+                {rows.length === 0 && (
+                  <tr><td colSpan={5} className="empty">Brak transakcji dla tego konta</td></tr>
+                )}
                 {rows.map((r, i) => (
                   <tr key={i}>
                     <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: '0.82rem' }}>{r.date}</td>

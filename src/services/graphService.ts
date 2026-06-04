@@ -12,10 +12,7 @@ async function graphFetch(method: string, path: string, body?: object) {
   const token = await getToken();
   const res = await fetch(`${GRAPH_BASE}${path}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(await res.text());
@@ -25,59 +22,90 @@ async function graphFetch(method: string, path: string, body?: object) {
 
 const SITE = `/sites/${SHAREPOINT_SITE_ID}`;
 
-// ---- Generic LIST operations ----
-export async function getListItems(listName: string, select?: string, filter?: string) {
-  let url = `${SITE}/lists/${listName}/items?expand=fields`;
-  if (select) url += `&$select=${select}`;
+// ---- Lista ID cache — wykrywa rzeczywiste ID list po display name ----
+let listIdCache: Record<string, string> = {};
+
+async function getListId(displayName: string): Promise<string> {
+  if (listIdCache[displayName]) return listIdCache[displayName];
+
+  // Załaduj wszystkie listy Finance raz
+  if (Object.keys(listIdCache).length === 0) {
+    const res = await graphFetch('GET', `${SITE}/lists?$select=id,displayName&$top=100`);
+    for (const l of (res.value || [])) {
+      listIdCache[l.displayName] = l.id;
+    }
+  }
+
+  const id = listIdCache[displayName];
+  if (!id) throw new Error(`Lista SharePoint nie znaleziona: "${displayName}"`);
+  return id;
+}
+
+// ---- Generic LIST operations (używa ID listy) ----
+export async function getListItems(displayName: string, filter?: string): Promise<any[]> {
+  const listId = await getListId(displayName);
+  let url = `${SITE}/lists/${listId}/items?expand=fields&$top=5000`;
   if (filter) url += `&$filter=${filter}`;
   const res = await graphFetch('GET', url);
-  return res.value;
+  return res.value || [];
 }
 
-export async function addListItem(listName: string, fields: object) {
-  return graphFetch('POST', `${SITE}/lists/${listName}/items`, { fields });
+export async function addListItem(displayName: string, fields: object) {
+  const listId = await getListId(displayName);
+  return graphFetch('POST', `${SITE}/lists/${listId}/items`, { fields });
 }
 
-export async function updateListItem(listName: string, id: string, fields: object) {
-  return graphFetch('PATCH', `${SITE}/lists/${listName}/items/${id}`, { fields });
+export async function updateListItem(displayName: string, id: string, fields: object) {
+  const listId = await getListId(displayName);
+  return graphFetch('PATCH', `${SITE}/lists/${listId}/items/${id}`, { fields });
 }
 
-export async function deleteListItem(listName: string, id: string) {
-  return graphFetch('DELETE', `${SITE}/lists/${listName}/items/${id}`);
+export async function deleteListItem(displayName: string, id: string) {
+  const listId = await getListId(displayName);
+  return graphFetch('DELETE', `${SITE}/lists/${listId}/items/${id}`);
 }
 
-// ---- Specific services ----
+// ---- Nazwy list (display names z SharePoint) ----
+const L = {
+  invoices:     'Finance Invoices',
+  transactions: 'Finance Transactions',
+  private:      'Finance Private Transactions',
+  contractors:  'Finance Contractors',
+  jpk:          'Finance JPK',
+  settings:     'Finance Settings',
+};
+
 export const InvoicesService = {
-  getAll: () => getListItems('FinanceInvoices'),
-  add: (fields: object) => addListItem('FinanceInvoices', fields),
-  update: (id: string, fields: object) => updateListItem('FinanceInvoices', id, fields),
-  delete: (id: string) => deleteListItem('FinanceInvoices', id),
+  getAll:  ()                    => getListItems(L.invoices),
+  add:     (fields: object)      => addListItem(L.invoices, fields),
+  update:  (id: string, f: object) => updateListItem(L.invoices, id, f),
+  delete:  (id: string)          => deleteListItem(L.invoices, id),
 };
 
 export const TransactionsService = {
-  getAll: () => getListItems('FinanceTransactions'),
-  add: (fields: object) => addListItem('FinanceTransactions', fields),
-  delete: (id: string) => deleteListItem('FinanceTransactions', id),
+  getAll:  ()               => getListItems(L.transactions),
+  add:     (f: object)      => addListItem(L.transactions, f),
+  delete:  (id: string)     => deleteListItem(L.transactions, id),
 };
 
 export const PrivateTransactionsService = {
-  getAll: (account?: string) => getListItems('FinancePrivateTransactions', undefined, account ? `fields/Account eq '${account}'` : undefined),
-  add: (fields: object) => addListItem('FinancePrivateTransactions', fields),
-  delete: (id: string) => deleteListItem('FinancePrivateTransactions', id),
+  getAll:  (account?: string) => getListItems(L.private, account ? `fields/Account eq '${account}'` : undefined),
+  add:     (f: object)        => addListItem(L.private, f),
+  delete:  (id: string)       => deleteListItem(L.private, id),
 };
 
 export const ContractorsService = {
-  getAll: () => getListItems('FinanceContractors'),
-  add: (fields: object) => addListItem('FinanceContractors', fields),
-  update: (id: string, fields: object) => updateListItem('FinanceContractors', id, fields),
+  getAll:  ()                    => getListItems(L.contractors),
+  add:     (f: object)           => addListItem(L.contractors, f),
+  update:  (id: string, f: object) => updateListItem(L.contractors, id, f),
 };
 
 export const JPKService = {
-  getAll: () => getListItems('FinanceJPK'),
-  add: (fields: object) => addListItem('FinanceJPK', fields),
+  getAll: () => getListItems(L.jpk),
+  add:    (f: object) => addListItem(L.jpk, f),
 };
 
 export const SettingsService = {
-  getAll: () => getListItems('FinanceSettings'),
-  set: (key: string, value: string) => addListItem('FinanceSettings', { SettingKey: key, SettingValue: value }),
+  getAll: () => getListItems(L.settings),
+  set:    (key: string, value: string) => addListItem(L.settings, { SettingKey: key, SettingValue: value }),
 };

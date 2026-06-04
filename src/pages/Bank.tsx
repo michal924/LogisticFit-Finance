@@ -1,42 +1,55 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Ico } from '../components/ui/icons';
 import { TransactionsService } from '../services/graphService';
-
-void TransactionsService; // imported but using placeholder data
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const ROWS = [
-  { date: '2026-06-03', title: 'Przelew przychodzący – LogiGroup S.A.', contractor: 'LogiGroup S.A.', invoice: 'FV/2026/089', amount: 14760.00, balance: 214800.00, dir: 'in' },
-  { date: '2026-06-02', title: 'Opłata za paliwo – ORLEN', contractor: 'PKN Orlen S.A.', invoice: 'FC/2026/041', amount: -3200.00, balance: 200040.00, dir: 'out' },
-  { date: '2026-06-02', title: 'Przelew – Pol-Trans Sp. z o.o.', contractor: 'Pol-Trans Sp. z o.o.', invoice: 'FV/2026/088', amount: 22140.00, balance: 203240.00, dir: 'in' },
-  { date: '2026-06-01', title: 'Wynajem biura – maj 2026', contractor: 'Biuro Premium Sp. z o.o.', invoice: 'FC/2026/038', amount: -4500.00, balance: 181100.00, dir: 'out' },
-  { date: '2026-05-31', title: 'Przelew – TechDist Polska', contractor: 'TechDist Polska', invoice: 'FV/2026/085', amount: 9840.00, balance: 185600.00, dir: 'in' },
-  { date: '2026-05-30', title: 'Abonament Microsoft 365', contractor: 'Microsoft Ireland', invoice: 'FC/2026/035', amount: -1230.00, balance: 175760.00, dir: 'out' },
-  { date: '2026-05-29', title: 'Przelew – Cargo Express', contractor: 'Cargo Express', invoice: 'FV/2026/082', amount: 18500.00, balance: 176990.00, dir: 'in' },
-  { date: '2026-05-28', title: 'ZUS – składki', contractor: 'Zakład Ubezpieczeń Społ.', invoice: '—', amount: -4200.00, balance: 158490.00, dir: 'out' },
-  { date: '2026-05-27', title: 'Przelew – MedLogistics', contractor: 'MedLogistics', invoice: 'FV/2026/079', amount: 11200.00, balance: 162690.00, dir: 'in' },
-  { date: '2026-05-26', title: 'Usługi telekomunikacyjne – T-Mobile', contractor: 'T-Mobile Polska S.A.', invoice: 'FC/2026/032', amount: -890.00, balance: 151490.00, dir: 'out' },
-  { date: '2026-05-23', title: 'Przelew – LogiGroup S.A.', contractor: 'LogiGroup S.A.', invoice: 'FV/2026/076', amount: 16300.00, balance: 152380.00, dir: 'in' },
-  { date: '2026-05-22', title: 'Podatek VAT – kwiecień 2026', contractor: 'Urząd Skarbowy', invoice: '—', amount: -18200.00, balance: 136080.00, dir: 'out' },
-  { date: '2026-05-21', title: 'Przelew – Pol-Trans Sp. z o.o.', contractor: 'Pol-Trans Sp. z o.o.', invoice: 'FV/2026/073', amount: 24500.00, balance: 154280.00, dir: 'in' },
-  { date: '2026-05-20', title: 'Leasing samochód – maj', contractor: 'Santander Leasing S.A.', invoice: 'FC/2026/029', amount: -2800.00, balance: 129780.00, dir: 'out' },
-  { date: '2026-05-19', title: 'Przelew – TechDist Polska', contractor: 'TechDist Polska', invoice: 'FV/2026/070', amount: 8900.00, balance: 132580.00, dir: 'in' },
-  { date: '2026-05-16', title: 'Opłata za paliwo – ORLEN', contractor: 'PKN Orlen S.A.', invoice: 'FC/2026/027', amount: -2750.00, balance: 123680.00, dir: 'out' },
-  { date: '2026-05-15', title: 'Przelew – Cargo Express', contractor: 'Cargo Express', invoice: 'FV/2026/067', amount: 12600.00, balance: 126430.00, dir: 'in' },
-  { date: '2026-05-14', title: 'Wynajem magazynu – kwiecień', contractor: 'MagPro Logistics', invoice: 'FC/2026/025', amount: -3800.00, balance: 113830.00, dir: 'out' },
-  { date: '2026-05-13', title: 'Przelew – MedLogistics', contractor: 'MedLogistics', invoice: 'FV/2026/064', amount: 9100.00, balance: 117630.00, dir: 'in' },
-  { date: '2026-05-12', title: 'Ubezpieczenie floty', contractor: 'PZU S.A.', invoice: 'FC/2026/023', amount: -5600.00, balance: 108530.00, dir: 'out' },
-];
+type Row = {
+  date: string;
+  title: string;
+  contractor: string;
+  invoice: string;
+  amount: number;
+  balance: number;
+  dir: 'in' | 'out';
+};
 
 export default function Bank() {
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = ROWS.filter(r => {
+  useEffect(() => {
+    TransactionsService.getAll()
+      .then((items: any[]) => {
+        const mapped: Row[] = items.map(item => {
+          const f = item.fields || {};
+          const amount = f.Amount ?? 0;
+          const type = (f.TransactionType || '').toLowerCase();
+          const dir: 'in' | 'out' = (type === 'credit' || amount > 0) ? 'in' : 'out';
+          return {
+            date: (f.TransactionDate || '').split('T')[0],
+            title: f.Description || '',
+            contractor: f.Contractor || '',
+            invoice: f.InvoiceRef || '—',
+            amount,
+            balance: f.Balance ?? 0,
+            dir,
+          };
+        });
+        // Sort by date descending
+        mapped.sort((a, b) => b.date.localeCompare(a.date));
+        setRows(mapped);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = rows.filter(r => {
     const q = search.toLowerCase();
     const matchSearch = !q || r.title.toLowerCase().includes(q) || r.contractor.toLowerCase().includes(q) || r.invoice.toLowerCase().includes(q);
     const matchFrom = !from || r.date >= from;
@@ -44,9 +57,20 @@ export default function Bank() {
     return matchSearch && matchFrom && matchTo;
   });
 
-  const inflow = ROWS.filter(r => r.dir === 'in').reduce((s, r) => s + r.amount, 0);
-  const outflow = Math.abs(ROWS.filter(r => r.dir === 'out').reduce((s, r) => s + r.amount, 0));
-  const unmatched = ROWS.filter(r => r.invoice === '—').length;
+  const balance = rows[0]?.balance ?? 0;
+  const balanceDate = rows[0]?.date ?? '';
+  const inflow = rows.filter(r => r.dir === 'in').reduce((s, r) => s + Math.abs(r.amount), 0);
+  const outflow = rows.filter(r => r.dir === 'out').reduce((s, r) => s + Math.abs(r.amount), 0);
+  const unmatched = rows.filter(r => r.invoice === '—').length;
+
+  if (loading) {
+    return (
+      <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 12 }}>
+        <div className="spinner" />
+        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Ładowanie transakcji…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="page-content">
@@ -64,15 +88,15 @@ export default function Bank() {
       <div className="grid cols-4" style={{ marginBottom: '1.5rem' }}>
         <div className="kpi" style={{ background: 'var(--navy-900)', color: '#fff', gridColumn: 'span 1' }}>
           <div className="label" style={{ color: 'rgba(255,255,255,0.6)' }}>Saldo bieżące</div>
-          <div className="value" style={{ color: '#fff', fontSize: '1.6rem' }}>{fmt(214800.00)} <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>PLN</span></div>
-          <div className="delta" style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem' }}>Stan na 2026-06-03</div>
+          <div className="value" style={{ color: '#fff', fontSize: '1.6rem' }}>{fmt(balance)} <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>PLN</span></div>
+          <div className="delta" style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem' }}>Stan na {balanceDate || '—'}</div>
         </div>
         <div className="kpi">
-          <div className="label"><span className="ico"><Ico name="TrendUp" size={15} /></span>Wpływy (miesiąc)</div>
+          <div className="label"><span className="ico"><Ico name="TrendUp" size={15} /></span>Wpływy (łącznie)</div>
           <div className="value" style={{ color: 'var(--green-600)' }}>{fmt(inflow)} <span className="unit">PLN</span></div>
         </div>
         <div className="kpi">
-          <div className="label"><span className="ico"><Ico name="TrendDown" size={15} /></span>Wydatki (miesiąc)</div>
+          <div className="label"><span className="ico"><Ico name="TrendDown" size={15} /></span>Wydatki (łącznie)</div>
           <div className="value" style={{ color: 'var(--red, #e53e3e)' }}>{fmt(outflow)} <span className="unit">PLN</span></div>
         </div>
         <div className="kpi">
@@ -85,6 +109,7 @@ export default function Bank() {
       <div className="card">
         <div className="card-head">
           <span>Transakcje</span>
+          <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>{rows.length} rekordów</span>
         </div>
         <div className="filterbar">
           <div style={{ position: 'relative', flex: 1 }}>
