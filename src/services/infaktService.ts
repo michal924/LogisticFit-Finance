@@ -1,4 +1,6 @@
 import type { Invoice } from '../types';
+import { uploadDocument } from './graphService';
+import { saveInvoice } from './invoiceService';
 
 // inFakt zwraca kwoty w GROSZACH (1/100 PLN) — konwersja
 function gr(v: any): number {
@@ -28,10 +30,10 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
     if (payment) paid = payment.symbol === 'paid';
   }
 
-  // Link do PDF w inFakt — przez nasz backend (server-side).
-  // Tylko faktury sprzedaży: inFakt generuje dla nich PDF. Koszty = wgrane skany/KSeF XML (brak pewnego endpointu).
-  const infaktId = pick(raw, 'id', 'uuid');
-  const fileUrl = (type === 'sales' && infaktId) ? `/api/infakt-pdf?type=${type}&id=${encodeURIComponent(infaktId)}` : '';
+  // Link do dokumentu w inFakt — przez nasz backend (server-side). Faktury: PDF generowany; koszty: skan z S3.
+  // Faktury używają id, koszty uuid.
+  const infaktId = type === 'cost' ? pick(raw, 'uuid', 'id') : pick(raw, 'id', 'uuid');
+  const fileUrl = infaktId ? `/api/infakt-pdf?type=${type}&id=${encodeURIComponent(infaktId)}` : '';
 
   return {
     type,
@@ -73,4 +75,57 @@ export async function fetchInfakt(type: 'sales' | 'cost'): Promise<Invoice[]> {
     page++;
   }
   return all;
+}
+
+function isArchived(url?: string): boolean {
+  return !!url && /sharepoint\.com/i.test(url);
+}
+
+/**
+ * Synchronizuje faktury z inFakt + archiwizuje dokumenty do SharePoint.
+ * - Dedup po numerze (upsert).
+ * - Archiwizacja: pobiera dokument z inFakt → wgrywa do biblioteki SharePoint → fileUrl wskazuje kopię.
+ * - BEZ DUPLIKATÓW: jeśli dokument już w SharePoint (fileUrl=...sharepoint...), pomija pobranie.
+ */
+export async function syncFromInfakt(
+  type: 'sales' | 'cost',
+  context: string,
+  existing: Invoice[],
+  onProgress?: (done: number, total: number, archived: number) => void,
+): Promise<{ ok: number; archived: number; total: number }> {
+  const fromInfakt = await fetchInfakt(type);
+  const category = type === 'sales' ? 'Faktury sprzedaży' : 'Faktury kosztowe';
+  let ok = 0, archived = 0;
+
+  for (let i = 0; i < fromInfakt.length; i++) {
+    const inv = fromInfakt[i];
+    const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
+    if (match) inv.spId = match.spId;
+
+    // Już zarchiwizowane wcześniej? → zachowaj kopię SharePoint, NIE pobieraj ponownie
+    if (isArchived(match?.fileUrl)) {
+      inv.fileUrl = match!.fileUrl;
+    } else if (inv.fileUrl && inv.fileUrl.startsWith('/api/infakt-pdf')) {
+      // Pobierz dokument z inFakt (przez backend) i zarchiwizuj w SharePoint
+      try {
+        const res = await fetch(inv.fileUrl);
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          const baseName = (inv.number || `dokument-${i}`).replace(/\.pdf$/i, '');
+          inv.fileUrl = await uploadDocument(context, category, inv.issueDate, `${baseName}.pdf`, buf);
+          archived++;
+        } else {
+          inv.fileUrl = ''; // dokument niedostępny — brak linku zamiast zepsutego
+        }
+      } catch {
+        inv.fileUrl = '';
+      }
+    }
+
+    await saveInvoice(inv, context);
+    ok++;
+    onProgress?.(i + 1, fromInfakt.length, archived);
+  }
+
+  return { ok, archived, total: fromInfakt.length };
 }

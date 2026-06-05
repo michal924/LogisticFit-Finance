@@ -1,60 +1,59 @@
 // ============================================================
-//  Finance LogisticFit — Backend: pobranie PDF faktury z inFakt
+//  Finance LogisticFit — Backend: pobranie dokumentu faktury z inFakt
 //  GET /api/infakt-pdf?type=sales|cost&id=<id|uuid>
-//  Pobiera PDF server-side (klucz inFakt ukryty) i streamuje do przeglądarki.
-//  UWAGA: pobranie PDF faktury w inFakt zmienia jej status na "Wydrukowano".
+//  Faktury sprzedaży: /invoices/{id}/pdf.json?document_type=original (PDF generowany)
+//  Koszty: szczegół /documents/costs/{uuid}.json → attachments[0].file_url (skan/KSeF z S3)
+//  Klucz inFakt server-side. Streamuje PDF do przeglądarki.
 // ============================================================
 
 const INFAKT_BASE = 'https://api.infakt.pl/api/v3';
 
 module.exports = async function (context, req) {
   const apiKey = process.env.INFAKT_API_KEY;
-  if (!apiKey) {
-    context.res = { status: 500, body: 'Brak INFAKT_API_KEY' };
-    return;
-  }
+  if (!apiKey) { context.res = { status: 500, body: 'Brak INFAKT_API_KEY' }; return; }
 
   const type = (req.query.type || 'sales').toLowerCase();
   const id = req.query.id;
   if (!id) { context.res = { status: 400, body: 'Brak id' }; return; }
 
-  // inFakt: faktury → /invoices/{id}/pdf.json, koszty → dokument źródłowy
-  // wymaga ?document_type=original (oryginał faktury)
-  const path = type === 'cost'
-    ? `documents/costs/${encodeURIComponent(id)}/pdf.json`
-    : `invoices/${encodeURIComponent(id)}/pdf.json`;
-  const url = `${INFAKT_BASE}/${path}?document_type=original`;
+  const H = { 'X-inFakt-ApiKey': apiKey };
 
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'X-inFakt-ApiKey': apiKey, 'Accept': 'application/pdf' },
-    });
+    let pdfBuffer = null;
+    let fileName = `dokument-${id}.pdf`;
 
-    if (!res.ok) {
-      const txt = await res.text();
-      context.res = { status: res.status, body: 'inFakt PDF: ' + txt.slice(0, 300) };
-      return;
-    }
-
-    const ctype = res.headers.get('content-type') || '';
-    let pdfBuffer;
-
-    if (ctype.includes('application/pdf')) {
-      pdfBuffer = Buffer.from(await res.arrayBuffer());
+    if (type === 'cost') {
+      // Koszt — pobierz szczegół, wyciągnij file_url skanu
+      const detRes = await fetch(`${INFAKT_BASE}/documents/costs/${encodeURIComponent(id)}.json`, { headers: { ...H, 'Accept': 'application/json' } });
+      if (!detRes.ok) { context.res = { status: detRes.status, body: 'inFakt koszt: ' + (await detRes.text()).slice(0, 200) }; return; }
+      const det = await detRes.json();
+      const att = Array.isArray(det.attachments) ? det.attachments[0] : null;
+      if (!att || !att.file_url) { context.res = { status: 404, body: 'Koszt nie ma załączonego skanu' }; return; }
+      fileName = att.file_name || fileName;
+      // file_url to bezpośredni (pre-signed) link S3 — pobieramy bez nagłówka inFakt
+      const fileRes = await fetch(att.file_url);
+      if (!fileRes.ok) { context.res = { status: 502, body: 'Pobranie skanu S3 nieudane' }; return; }
+      pdfBuffer = Buffer.from(await fileRes.arrayBuffer());
     } else {
-      // czasem inFakt zwraca JSON z base64
-      const data = await res.json();
-      const b64 = data.pdf || data.content || data.data;
-      if (!b64) { context.res = { status: 502, body: 'inFakt nie zwrócił PDF' }; return; }
-      pdfBuffer = Buffer.from(b64, 'base64');
+      // Faktura sprzedaży — PDF generowany przez inFakt
+      const res = await fetch(`${INFAKT_BASE}/invoices/${encodeURIComponent(id)}/pdf.json?document_type=original`, { headers: { ...H, 'Accept': 'application/pdf' } });
+      if (!res.ok) { context.res = { status: res.status, body: 'inFakt PDF: ' + (await res.text()).slice(0, 200) }; return; }
+      const ctype = res.headers.get('content-type') || '';
+      if (ctype.includes('application/pdf')) {
+        pdfBuffer = Buffer.from(await res.arrayBuffer());
+      } else {
+        const data = await res.json();
+        const b64 = data.pdf || data.content || data.data;
+        if (!b64) { context.res = { status: 502, body: 'inFakt nie zwrócił PDF' }; return; }
+        pdfBuffer = Buffer.from(b64, 'base64');
+      }
     }
 
     context.res = {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="faktura-${id}.pdf"`,
+        'Content-Disposition': `inline; filename="${fileName.replace(/[^\w.\-]/g, '_')}"`,
         'Cache-Control': 'private, max-age=300',
       },
       body: pdfBuffer,

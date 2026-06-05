@@ -5,7 +5,7 @@ import { Upload, FileUp, Loader2, X, Check, Clock, Search, ChevronRight, Refresh
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
 import { uploadDocument } from '../services/graphService';
-import { fetchInfakt } from '../services/infaktService';
+import { syncFromInfakt } from '../services/infaktService';
 
 type Filter = 'all' | 'paid' | 'pending' | 'overdue';
 
@@ -43,18 +43,12 @@ export default function FakturyKosztowe() {
   const today = new Date().toISOString().split('T')[0];
 
   async function handleInfaktSync() {
-    setSyncing(true); setSyncMsg('Pobieram faktury kosztowe z inFakt…');
+    setSyncing(true); setSyncMsg('Pobieram i archiwizuję faktury kosztowe z inFakt…');
     try {
-      const fromInfakt = await fetchInfakt('cost');
-      let ok = 0;
-      for (const inv of fromInfakt) {
-        const existing = invoices.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
-        // inFakt = źródło prawdy: zachowujemy tylko spId (upsert). Status/kwoty/fileUrl(PDF) bierzemy z inFakt
-        if (existing) { inv.spId = existing.spId; if (!inv.fileUrl) inv.fileUrl = existing.fileUrl; }
-        await saveInvoice(inv, context);
-        ok++;
-      }
-      setSyncMsg(`✓ Zsynchronizowano ${ok} faktur z inFakt`);
+      const r = await syncFromInfakt('cost', context, invoices, (done, total, arch) => {
+        setSyncMsg(`Synchronizuję… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
+      });
+      setSyncMsg(`✓ Zsynchronizowano ${r.ok} faktur · zarchiwizowano ${r.archived} dokumentów w SharePoint`);
       await reload();
     } catch (e: any) {
       setSyncMsg('Błąd inFakt: ' + (e.message || e));
