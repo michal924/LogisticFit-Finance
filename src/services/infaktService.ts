@@ -86,6 +86,27 @@ function isArchived(url?: string): boolean {
 }
 
 /**
+ * Lekki auto-sync DANYCH (bez archiwizacji PDF). Zapisuje tylko nowe/zmienione faktury.
+ * Używany przy starcie aplikacji — szybkie odświeżenie statusów z inFakt.
+ * @returns liczba zaktualizowanych/dodanych faktur
+ */
+export async function autoSyncData(type: 'sales' | 'cost', context: string, existing: Invoice[]): Promise<number> {
+  const fromInfakt = await fetchInfakt(type);
+  let changed = 0;
+  for (const inv of fromInfakt) {
+    const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
+    if (match) {
+      inv.spId = match.spId;
+      inv.fileUrl = match.fileUrl; // zachowaj link do archiwum (nie ruszamy PDF)
+      // Pomiń jeśli nic się nie zmieniło (status + kwoty)
+      if (match.paid === inv.paid && match.grossTotal === inv.grossTotal && match.netTotal === inv.netTotal) continue;
+    }
+    try { await saveInvoice(inv, context); changed++; } catch { /* pojedynczy błąd — pomijamy */ }
+  }
+  return changed;
+}
+
+/**
  * Synchronizuje faktury z inFakt + archiwizuje dokumenty do SharePoint.
  * - Dedup po numerze (upsert).
  * - Archiwizacja: pobiera dokument z inFakt → wgrywa do biblioteki SharePoint → fileUrl wskazuje kopię.

@@ -4,7 +4,7 @@ import { FileUp, Upload, Loader2, X, Check, Clock, Search, ChevronRight, Refresh
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
 import { uploadDocument } from '../services/graphService';
-import { syncFromInfakt } from '../services/infaktService';
+import { syncFromInfakt, autoSyncData } from '../services/infaktService';
 
 type Filter = 'all' | 'paid' | 'pending' | 'overdue';
 
@@ -63,6 +63,21 @@ export default function FakturySprzedazy() {
   };
 
   useEffect(() => { reload(); }, [context]);
+
+  // Auto-sync danych przy starcie (lekki, bez archiwizacji PDF) — throttle 5 min/kontekst
+  useEffect(() => {
+    if (loading || context === 'prywatne') return;
+    const key = `autosync-sales-${context}`;
+    const last = Number(sessionStorage.getItem(key) || 0);
+    if (Date.now() - last < 5 * 60 * 1000) return;
+    sessionStorage.setItem(key, String(Date.now()));
+    (async () => {
+      try {
+        const n = await autoSyncData('sales', context, invoices);
+        if (n > 0) { setSyncMsg(`✓ Auto-zsynchronizowano ${n} faktur z inFakt`); await reload(); }
+      } catch { /* cicho */ }
+    })();
+  }, [loading, context]);
 
   const filtered = invoices.filter(inv => {
     if (filter === 'paid' && !inv.paid) return false;
