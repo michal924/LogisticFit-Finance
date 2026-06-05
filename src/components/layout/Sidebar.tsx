@@ -15,13 +15,17 @@ const SCREENS_BY_CONTEXT: Record<string, string[]> = {
   prywatne: ['', 'bank-prywatny', 'koszty', 'raporty', 'ustawienia'],
 };
 
-// Finance module mark — navy ring + green growth arrow
-function FinanceMark({ size = 28 }: { size?: number }) {
+// Finance brand mark — bar-chart + rising green arrow on deep-navy tile (znak własny, niesie własne tło)
+function FinanceMark({ size = 34 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="11 11 78 78" fill="none" aria-label="Finance">
-      <path d="M 76.0 29.7 A 33 33 0 1 1 60.2 18.6" stroke="var(--lf-navy)" strokeWidth="9" strokeLinecap="round" />
-      <line x1="34" y1="66" x2="74" y2="26" stroke="var(--lf-green)" strokeWidth="9" strokeLinecap="round" />
-      <polyline points="58 26 76 24 74 42" fill="none" stroke="var(--lf-green)" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 200 200" role="img" aria-label="LogisticFit Finance" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="200" height="200" rx="28" fill="#0A2540" />
+      <g fill="#C2D1E0">
+        <rect x="46" y="112" width="24" height="42" rx="6" />
+        <rect x="88" y="88" width="24" height="66" rx="6" />
+        <rect x="130" y="62" width="24" height="92" rx="6" />
+      </g>
+      <path d="M48,130 L150,52 M150,52 L124,54 M150,52 L148,78" fill="none" stroke="#1C7C56" strokeWidth={12} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -70,14 +74,19 @@ export function Sidebar({ lang }: { lang: Lang }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <div className="sidebar-logo" style={{ background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <FinanceMark size={26} />
+        {/* Znak niesie własne navy tło — renderujemy bezpośrednio, bez dodatkowego boxa */}
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <FinanceMark size={34} />
         </div>
         {!collapsed && (
           <>
-            <div className="sidebar-brand">
-              <span style={{ fontWeight: 800, letterSpacing: '-0.02em' }}>Finance</span>
-              <span className="sub"><span style={{ color: 'var(--lf-navy)' }}>Logistic</span><span style={{ color: 'var(--lf-green)' }}>Fit</span></span>
+            <div className="sidebar-brand" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, fontFamily: "'Poppins', system-ui, sans-serif" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: '#0A2540' }}>
+                Logistic<span style={{ color: '#1C7C56' }}>Fit</span>
+              </span>
+              <span style={{ fontSize: 9.5, fontWeight: 500, letterSpacing: '0.34em', color: '#5B7186', marginTop: 3 }}>
+                FINANCE
+              </span>
             </div>
             <button className="sidebar-collapse-btn" onClick={() => setSidebarCollapsed(true)} aria-label="Zwiń">
               <Ico name="PanelLeftClose" size={15} />
