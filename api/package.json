@@ -1,0 +1,7 @@
+{
+  "name": "logisticfit-finance-api",
+  "version": "1.0.0",
+  "description": "Backend API dla Finance LogisticFit — przetwarzanie PDF server-side",
+  "main": "process-pdf/index.js",
+  "engines": { "node": ">=18" }
+}

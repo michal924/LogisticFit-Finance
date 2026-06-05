@@ -67,44 +67,19 @@ export async function removeInvoice(spId: string): Promise<void> {
   await InvoicesService.delete(spId);
 }
 
-// Przetwarzanie PDF przez Claude Haiku
+// Przetwarzanie PDF — przez nasz backend (Azure Function), klucz Anthropic server-side
 export async function processPdfWithAI(base64: string, type: 'sales' | 'cost'): Promise<Partial<Invoice>> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('Brak klucza VITE_ANTHROPIC_API_KEY');
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('/api/process-pdf', {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 2048,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'document',
-            source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-          },
-          {
-            type: 'text',
-            text: `Jesteś asystentem do rozpoznawania polskich faktur VAT. Typ faktury: ${type === 'sales' ? 'sprzedażowa' : 'kosztowa'}.
-Wyodrębnij dane i zwróć TYLKO JSON (bez żadnego tekstu):
-{"number":"","issueDate":"YYYY-MM-DD","dueDate":"YYYY-MM-DD","counterparty":"","nip":"","lines":[{"description":"","quantity":1,"unitPrice":0,"vatRate":23,"netAmount":0,"vatAmount":0,"grossAmount":0}],"netTotal":0,"vatTotal":0,"grossTotal":0,"currency":"PLN"}
-Zasady: vatRate tylko 0/5/8/23, kwoty jako liczby, daty YYYY-MM-DD.`,
-          },
-        ],
-      }],
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfBase64: base64, type }),
   });
 
-  if (!res.ok) throw new Error('Błąd API Anthropic: ' + await res.text());
-  const json = await res.json();
-  const text = json.content?.[0]?.text || '';
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('AI nie zwróciło JSON');
-  return JSON.parse(match[0]);
+  if (!res.ok) {
+    let msg = 'Błąd przetwarzania PDF';
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  return data.invoice as Partial<Invoice>;
 }
