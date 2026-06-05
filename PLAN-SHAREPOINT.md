@@ -134,6 +134,18 @@ Folder per **rok/miesiąc** bo:
 
 ---
 
+## ✅ STATUS WDROŻENIA (aktualizacja 2026-06-05)
+
+- **Faza A** — 3 biblioteki utworzone (Finance JDG / Spółka / Prywatne) ✅
+- **Faza B** — upload PDF przy imporcie faktur → archiwum + pole FileUrl ✅ (kod)
+- **Faza C** — przycisk "Otwórz oryginał PDF" w panelu faktury ✅ (kod)
+- **Faza D** — archiwizacja wyciągów CSV → do zrobienia
+- **Faza E** — zapis JPK XML → później
+
+**Wymaga jednorazowo:** `node ~/Cash-app/setup/add-fileurl-column.mjs` (kolumna FileUrl)
+
+---
+
 ## 7. Proponowane kolejne działania (po powrocie)
 
 1. **Decyzja:** Opcja 1 czy 2 (jedna biblioteka vs trzy)

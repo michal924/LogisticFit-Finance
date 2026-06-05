@@ -27,6 +27,7 @@ export interface Invoice {
   paid: boolean;
   paymentDate?: string;
   notes?: string;
+  fileUrl?: string;   // link do oryginalnego PDF w bibliotece dokumentów
 }
 
 export interface BankTransaction {

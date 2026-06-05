@@ -20,6 +20,7 @@ function spToInvoice(item: any): Invoice {
     currency: f.Currency || 'PLN',
     paid: f.Paid || false,
     notes: f.Notes || '',
+    fileUrl: f.FileUrl || '',
   };
 }
 
@@ -40,6 +41,7 @@ function invoiceToSp(inv: Invoice, context?: string) {
     Lines: JSON.stringify(inv.lines || []),
     Notes: inv.notes || '',
     ...(context ? { Context: context } : {}),
+    ...(inv.fileUrl ? { FileUrl: inv.fileUrl } : {}),
   };
 }
 

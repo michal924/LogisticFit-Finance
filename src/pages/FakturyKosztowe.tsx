@@ -1,9 +1,10 @@
 // Identyczny ekran co FakturySprzedazy — tylko typ "cost"
 import { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Upload, Loader2, X, Check, Clock, Search, ChevronRight } from 'lucide-react';
+import { Upload, FileUp, Loader2, X, Check, Clock, Search, ChevronRight } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
+import { uploadDocument } from '../services/graphService';
 
 type Filter = 'all' | 'paid' | 'pending' | 'overdue';
 
@@ -75,6 +76,11 @@ export default function FakturyKosztowe() {
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
         const data = await processPdfWithAI(base64, 'cost');
         const inv: Invoice = { ...data, type: 'cost', paid: false, lines: data.lines || [], currency: 'PLN' } as Invoice;
+        // Archiwizuj oryginalny PDF w bibliotece dokumentów
+        try {
+          const baseName = (inv.number || pdfs[i].name).replace(/\.pdf$/i, '');
+          inv.fileUrl = await uploadDocument(context, 'Faktury kosztowe', inv.issueDate, `${baseName}.pdf`, buffer);
+        } catch (e) { console.warn('Archiwizacja PDF nieudana:', e); }
         await saveInvoice(inv, context);
         ok++;
         setPdfQueue(q => q.map((item, idx) => idx === i ? { ...item, status: 'done' } : item));
@@ -258,6 +264,12 @@ export default function FakturyKosztowe() {
                 </div>
               ))}
             </div>
+          )}
+          {selected.fileUrl && (
+            <a href={selected.fileUrl} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', marginBottom: 12, background: 'var(--lf-navy-50, #f0f4ff)', border: '1px solid var(--lf-navy-200, #c7d0ec)', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none', justifyContent: 'center' }}>
+              <FileUp size={14} /> Otwórz oryginał PDF
+            </a>
           )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={() => togglePaid(selected)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: selected.paid ? '#fff' : '#239d46', color: selected.paid ? 'var(--fg-2)' : '#fff', border: `1px solid ${selected.paid ? 'var(--border)' : '#239d46'}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>

@@ -58,6 +58,76 @@ export function filterByContext(items: any[], context: string): any[] {
   });
 }
 
+// ====================================================================
+//  BIBLIOTEKI DOKUMENTÓW — archiwum oryginalnych plików (PDF/CSV/XML)
+// ====================================================================
+
+// Mapowanie kontekstu → nazwa biblioteki dokumentów
+const LIBRARY_BY_CONTEXT: Record<string, string> = {
+  jdg:      'Finance JDG',
+  spolka:   'Finance Spółka',
+  prywatne: 'Finance Prywatne',
+};
+
+const MONTH_FOLDERS = ['01-Styczeń','02-Luty','03-Marzec','04-Kwiecień','05-Maj','06-Czerwiec',
+  '07-Lipiec','08-Sierpień','09-Wrzesień','10-Październik','11-Listopad','12-Grudzień'];
+
+// Cache drive ID per biblioteka
+const driveIdCache: Record<string, string> = {};
+
+async function getDriveId(libraryName: string): Promise<string> {
+  if (driveIdCache[libraryName]) return driveIdCache[libraryName];
+  const listId = await getListId(libraryName);
+  const res = await graphFetch('GET', `${SITE}/lists/${listId}/drive?$select=id`);
+  driveIdCache[libraryName] = res.id;
+  return res.id;
+}
+
+// Sanityzuje nazwę pliku (usuwa znaki niedozwolone w SharePoint)
+function sanitizeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|#%]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+/**
+ * Wgrywa plik do biblioteki dokumentów we właściwym folderze.
+ * @param context  jdg / spolka / prywatne
+ * @param category np. "Faktury sprzedaży", "Faktury kosztowe", "Wyciągi bankowe", "JPK"
+ * @param dateStr  data dokumentu "YYYY-MM-DD" (wyznacza folder rok/miesiąc)
+ * @param fileName nazwa docelowa pliku (np. "FV-2026-001.pdf")
+ * @param content  zawartość (ArrayBuffer / Blob / Uint8Array)
+ * @returns webUrl wgranego pliku (do zapisania jako FileUrl na liście)
+ */
+export async function uploadDocument(
+  context: string,
+  category: string,
+  dateStr: string,
+  fileName: string,
+  content: ArrayBuffer | Blob | Uint8Array,
+): Promise<string> {
+  const library = LIBRARY_BY_CONTEXT[context] || 'Finance JDG';
+  const driveId = await getDriveId(library);
+
+  // Folder: Kategoria/Rok/MM-Miesiąc
+  const d = dateStr && /^\d{4}-\d{2}/.test(dateStr) ? dateStr : new Date().toISOString();
+  const year = d.slice(0, 4);
+  const monthIdx = parseInt(d.slice(5, 7), 10) - 1;
+  const monthFolder = MONTH_FOLDERS[monthIdx] || '01-Styczeń';
+  const folderPath = `${category}/${year}/${monthFolder}`;
+
+  const safeName = sanitizeFileName(fileName);
+  const uploadPath = `${SITE}/drives/${driveId}/root:/${encodeURI(`${folderPath}/${safeName}`)}:/content`;
+
+  const token = await getToken();
+  const res = await fetch(`${GRAPH_BASE}${uploadPath}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+    body: content as BodyInit,
+  });
+  if (!res.ok) throw new Error('Upload nieudany: ' + await res.text());
+  const item = await res.json();
+  return item.webUrl as string;
+}
+
 export async function addListItem(displayName: string, fields: object) {
   const listId = await getListId(displayName);
   return graphFetch('POST', `${SITE}/lists/${listId}/items`, { fields });
