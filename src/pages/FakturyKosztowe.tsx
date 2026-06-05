@@ -76,6 +76,9 @@ export default function FakturyKosztowe() {
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
         const data = await processPdfWithAI(base64, 'cost');
         const inv: Invoice = { ...data, type: 'cost', paid: false, lines: data.lines || [], currency: 'PLN' } as Invoice;
+        // Dedup: jeśli faktura o tym numerze już istnieje w tym kontekście — aktualizuj (dograj PDF), nie twórz duplikatu
+        const existing = invoices.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
+        if (existing) { inv.spId = existing.spId; inv.paid = existing.paid; }
         // Archiwizuj oryginalny PDF w bibliotece dokumentów
         try {
           const baseName = (inv.number || pdfs[i].name).replace(/\.pdf$/i, '');
