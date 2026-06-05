@@ -19,7 +19,7 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
   const issueDate = (pick(raw, 'invoice_date', 'issue_date', 'date', 'created_at') || '').toString().split('T')[0];
   const dueDate = (pick(raw, 'payment_date', 'due_date', 'payment_due_date') || '').toString().split('T')[0];
   const counterparty = pick(raw, 'client_company_name', 'client_name', 'seller_name', 'contractor_name', 'company_name') || '';
-  const nip = (pick(raw, 'client_nip', 'nip', 'client_tax_code', 'seller_nip') || '').toString();
+  const nip = (pick(raw, 'client_nip', 'nip', 'client_tax_code', 'seller_tax_code', 'seller_nip') || '').toString();
   const statusRaw = (pick(raw, 'status', 'payment_status') || '').toString().toLowerCase();
   const paid = statusRaw.includes('paid') || statusRaw === 'opłacona' || !!pick(raw, 'paid_date');
 
