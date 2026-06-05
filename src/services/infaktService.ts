@@ -28,9 +28,10 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
     if (payment) paid = payment.symbol === 'paid';
   }
 
-  // Link do PDF w inFakt — przez nasz backend (pobiera z inFakt po stronie serwera)
+  // Link do PDF w inFakt — przez nasz backend (server-side).
+  // Tylko faktury sprzedaży: inFakt generuje dla nich PDF. Koszty = wgrane skany/KSeF XML (brak pewnego endpointu).
   const infaktId = pick(raw, 'id', 'uuid');
-  const fileUrl = infaktId ? `/api/infakt-pdf?type=${type}&id=${encodeURIComponent(infaktId)}` : '';
+  const fileUrl = (type === 'sales' && infaktId) ? `/api/infakt-pdf?type=${type}&id=${encodeURIComponent(infaktId)}` : '';
 
   return {
     type,
