@@ -19,10 +19,11 @@ module.exports = async function (context, req) {
   if (!id) { context.res = { status: 400, body: 'Brak id' }; return; }
 
   // inFakt: faktury → /invoices/{id}/pdf.json, koszty → dokument źródłowy
+  // wymaga ?document_type=original (oryginał faktury)
   const path = type === 'cost'
     ? `documents/costs/${encodeURIComponent(id)}/pdf.json`
     : `invoices/${encodeURIComponent(id)}/pdf.json`;
-  const url = `${INFAKT_BASE}/${path}`;
+  const url = `${INFAKT_BASE}/${path}?document_type=original`;
 
   try {
     const res = await fetch(url, {
