@@ -27,6 +27,7 @@ export interface Invoice {
   paid: boolean;
   paymentDate?: string;
   notes?: string;
+  category?: string;    // kategoria kosztu z inFakt (np. "Paliwo") — tylko faktury kosztowe
   fileUrl?: string;     // link do głównego PDF w bibliotece dokumentów
   attachments?: { name: string; url: string }[];  // wszystkie dokumenty faktury (główny + załączniki)
   infaktId?: string;    // id/uuid w inFakt (transient — do archiwizacji, nie zapisywane)

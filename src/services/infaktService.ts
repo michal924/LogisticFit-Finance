@@ -51,6 +51,7 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
     currency: pick(raw, 'currency') || 'PLN',
     paid,
     notes: pick(raw, 'ksef_number') ? `KSeF: ${raw.ksef_number}` : '',
+    ...(type === 'cost' ? { category: pick(raw, 'category', 'category_name', 'kind') || '' } : {}),
     fileUrl,
     infaktId: rawId ? String(rawId) : undefined,
     infaktUuid: rawUuid ? String(rawUuid) : undefined,
@@ -99,8 +100,8 @@ export async function autoSyncData(type: 'sales' | 'cost', context: string, exis
       inv.spId = match.spId;
       inv.fileUrl = match.fileUrl;          // zachowaj link do archiwum (nie ruszamy PDF)
       inv.attachments = match.attachments;  // zachowaj listę dokumentów
-      // Pomiń jeśli nic się nie zmieniło (status + kwoty)
-      if (match.paid === inv.paid && match.grossTotal === inv.grossTotal && match.netTotal === inv.netTotal) continue;
+      // Pomiń jeśli nic się nie zmieniło (status + kwoty + kategoria)
+      if (match.paid === inv.paid && match.grossTotal === inv.grossTotal && match.netTotal === inv.netTotal && (match.category || '') === (inv.category || '')) continue;
     }
     try { await saveInvoice(inv, context); changed++; } catch { /* pojedynczy błąd — pomijamy */ }
   }

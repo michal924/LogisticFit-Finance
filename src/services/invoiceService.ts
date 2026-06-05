@@ -20,6 +20,7 @@ function spToInvoice(item: any): Invoice {
     currency: f.Currency || 'PLN',
     paid: f.Paid || false,
     notes: f.Notes || '',
+    category: f.CostCategory || '',
     fileUrl: f.FileUrl || '',
     attachments: (() => { try { return JSON.parse(f.DocLinks || '[]'); } catch { return []; } })(),
   };
@@ -41,6 +42,7 @@ function invoiceToSp(inv: Invoice, context?: string) {
     Paid: inv.paid,
     Lines: JSON.stringify(inv.lines || []),
     Notes: inv.notes || '',
+    ...(inv.category ? { CostCategory: inv.category } : {}),
     ...(context ? { Context: context } : {}),
     ...(inv.fileUrl ? { FileUrl: inv.fileUrl } : {}),
     ...(inv.attachments?.length ? { DocLinks: JSON.stringify(inv.attachments) } : {}),
