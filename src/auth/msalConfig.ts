@@ -15,5 +15,6 @@ export const loginRequest: PopupRequest = {
   scopes: ['User.Read', 'Sites.ReadWrite.All'],
 };
 
-export const SHAREPOINT_SITE_ID = 'logisticfit.sharepoint.com,d6919769-9612-452f-b698-f9f3296caaca,6cd9f1ba-30f7-474d-8317-baa9693f27c1';
+// Dedykowana witryna /sites/finance (przepięta z root site 2026-06-05)
+export const SHAREPOINT_SITE_ID = 'logisticfit.sharepoint.com,d6957fc8-14ef-4125-8bcc-f9a1a10bbf7f,c0d9bbfe-eece-487a-9d9a-85e0036ab50c';
 export const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
