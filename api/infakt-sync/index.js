@@ -40,13 +40,13 @@ module.exports = async function (context, req) {
 
     const data = await res.json();
     // inFakt zwraca { entities: [...], metadata: {...} } lub tablicę — normalizujemy
-    const items = Array.isArray(data) ? data : (data.entities || data.invoices || data.costs || []);
+    const items = Array.isArray(data) ? data : (data.entities || data.invoices || data.costs || data.documents || []);
     const metadata = data.metadata || {};
 
     context.res = {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: { type: endpoint, page, count: items.length, items, metadata },
+      body: { type, page, count: items.length, items, metadata },
     };
   } catch (e) {
     context.res = { status: 500, body: { error: 'Wyjątek serwera: ' + (e.message || String(e)) } };
