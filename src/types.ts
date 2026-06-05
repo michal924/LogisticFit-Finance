@@ -27,7 +27,8 @@ export interface Invoice {
   paid: boolean;
   paymentDate?: string;
   notes?: string;
-  fileUrl?: string;     // link do oryginalnego PDF w bibliotece dokumentów
+  fileUrl?: string;     // link do głównego PDF w bibliotece dokumentów
+  attachments?: { name: string; url: string }[];  // wszystkie dokumenty faktury (główny + załączniki)
   infaktId?: string;    // id/uuid w inFakt (transient — do archiwizacji, nie zapisywane)
   infaktUuid?: string;
 }

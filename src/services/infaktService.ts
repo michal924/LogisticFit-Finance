@@ -97,7 +97,8 @@ export async function autoSyncData(type: 'sales' | 'cost', context: string, exis
     const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
     if (match) {
       inv.spId = match.spId;
-      inv.fileUrl = match.fileUrl; // zachowaj link do archiwum (nie ruszamy PDF)
+      inv.fileUrl = match.fileUrl;          // zachowaj link do archiwum (nie ruszamy PDF)
+      inv.attachments = match.attachments;  // zachowaj listę dokumentów
       // Pomiń jeśli nic się nie zmieniło (status + kwoty)
       if (match.paid === inv.paid && match.grossTotal === inv.grossTotal && match.netTotal === inv.netTotal) continue;
     }
@@ -131,6 +132,7 @@ export async function syncFromInfakt(
     // Już zarchiwizowane wcześniej? → zachowaj kopię SharePoint, pomiń (chyba że force = pełna re-archiwizacja)
     if (!force && isArchived(match?.fileUrl)) {
       inv.fileUrl = match!.fileUrl;
+      inv.attachments = match!.attachments;
     } else if (inv.infaktId || inv.infaktUuid) {
       // Pobierz MANIFEST wszystkich dokumentów (główny + załączniki) i zarchiwizuj każdy
       try {
@@ -139,6 +141,7 @@ export async function syncFromInfakt(
         const docs: { name: string; url: string }[] = manifest.documents || [];
         const baseName = (inv.number || `dokument-${i}`).replace(/[\\/:*?"<>|]/g, '-');
         let firstUrl = '';
+        const archivedDocs: { name: string; url: string }[] = [];
         for (let di = 0; di < docs.length; di++) {
           try {
             const dres = await fetch(docs[di].url);
@@ -146,13 +149,16 @@ export async function syncFromInfakt(
             const buf = await dres.arrayBuffer();
             // nazwa: numer faktury + (sufiks dla kolejnych załączników)
             const ext = (docs[di].name.split('.').pop() || 'pdf').toLowerCase();
+            const label = di === 0 ? 'Faktura (oryginał)' : `Załącznik ${di}`;
             const fname = di === 0 ? `${baseName}.${ext}` : `${baseName}_zal${di}_${docs[di].name}`;
             const sp = await uploadDocument(context, category, inv.issueDate, fname, buf);
             if (di === 0) firstUrl = sp;
+            archivedDocs.push({ name: label, url: sp });
             archived++;
           } catch { /* pojedynczy dokument nieudany — pomijamy */ }
         }
         inv.fileUrl = firstUrl;
+        inv.attachments = archivedDocs;
       } catch {
         inv.fileUrl = '';
       }

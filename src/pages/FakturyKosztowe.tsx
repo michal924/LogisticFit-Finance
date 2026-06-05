@@ -319,11 +319,21 @@ export default function FakturyKosztowe() {
               ))}
             </div>
           )}
-          {selected.fileUrl && (
-            <a href={selected.fileUrl} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', marginBottom: 12, background: 'var(--lf-navy-50, #f0f4ff)', border: '1px solid var(--lf-navy-200, #c7d0ec)', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none', justifyContent: 'center' }}>
-              <FileUp size={14} /> Otwórz oryginał PDF
-            </a>
+          {(selected.attachments?.length || selected.fileUrl) && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', marginBottom: 6 }}>DOKUMENTY</div>
+              {(selected.attachments?.length
+                ? selected.attachments
+                : [{ name: 'Dokument (oryginał)', url: selected.fileUrl! }]
+              ).map((doc, i) => (
+                <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 6, background: 'var(--lf-navy-50, #f0f4ff)', border: '1px solid var(--lf-navy-200, #c7d0ec)', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
+                  <FileUp size={14} style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{doc.name}</span>
+                  <ChevronRight size={14} />
+                </a>
+              ))}
+            </div>
           )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={() => togglePaid(selected)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: selected.paid ? '#fff' : '#239d46', color: selected.paid ? 'var(--fg-2)' : '#fff', border: `1px solid ${selected.paid ? 'var(--border)' : '#239d46'}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
