@@ -21,7 +21,7 @@ function spToInvoice(item: any): Invoice {
     paid: f.Paid || false,
     notes: f.Notes || '',
     fileUrl: f.FileUrl || '',
-    attachments: (() => { try { return JSON.parse(f.Attachments || '[]'); } catch { return []; } })(),
+    attachments: (() => { try { return JSON.parse(f.DocLinks || '[]'); } catch { return []; } })(),
   };
 }
 
@@ -43,7 +43,7 @@ function invoiceToSp(inv: Invoice, context?: string) {
     Notes: inv.notes || '',
     ...(context ? { Context: context } : {}),
     ...(inv.fileUrl ? { FileUrl: inv.fileUrl } : {}),
-    ...(inv.attachments?.length ? { Attachments: JSON.stringify(inv.attachments) } : {}),
+    ...(inv.attachments?.length ? { DocLinks: JSON.stringify(inv.attachments) } : {}),
   };
 }
 
