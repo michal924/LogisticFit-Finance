@@ -31,9 +31,11 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
   }
 
   // Link do dokumentu w inFakt — przez nasz backend (server-side). Faktury: PDF generowany; koszty: skan z S3.
-  // Faktury używają id, koszty uuid.
-  const infaktId = type === 'cost' ? pick(raw, 'uuid', 'id') : pick(raw, 'id', 'uuid');
-  const fileUrl = infaktId ? `/api/infakt-pdf?type=${type}&id=${encodeURIComponent(infaktId)}` : '';
+  // Faktury używają id (do PDF) i uuid (do załączników); koszty uuid.
+  const rawId = pick(raw, 'id', 'uuid');
+  const rawUuid = pick(raw, 'uuid', 'id');
+  const docId = type === 'cost' ? rawUuid : rawId;
+  const fileUrl = docId ? `/api/infakt-pdf?type=${type}&id=${encodeURIComponent(docId)}` : '';
 
   return {
     type,
@@ -50,6 +52,8 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
     paid,
     notes: pick(raw, 'ksef_number') ? `KSeF: ${raw.ksef_number}` : '',
     fileUrl,
+    infaktId: rawId ? String(rawId) : undefined,
+    infaktUuid: rawUuid ? String(rawUuid) : undefined,
   };
 }
 
@@ -102,21 +106,31 @@ export async function syncFromInfakt(
     const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
     if (match) inv.spId = match.spId;
 
-    // Już zarchiwizowane wcześniej? → zachowaj kopię SharePoint, NIE pobieraj ponownie
+    // Już zarchiwizowane wcześniej? → zachowaj kopię SharePoint, NIE pobieraj ponownie (bez duplikatów)
     if (isArchived(match?.fileUrl)) {
       inv.fileUrl = match!.fileUrl;
-    } else if (inv.fileUrl && inv.fileUrl.startsWith('/api/infakt-pdf')) {
-      // Pobierz dokument z inFakt (przez backend) i zarchiwizuj w SharePoint
+    } else if (inv.infaktId || inv.infaktUuid) {
+      // Pobierz MANIFEST wszystkich dokumentów (główny + załączniki) i zarchiwizuj każdy
       try {
-        const res = await fetch(inv.fileUrl);
-        if (res.ok) {
-          const buf = await res.arrayBuffer();
-          const baseName = (inv.number || `dokument-${i}`).replace(/\.pdf$/i, '');
-          inv.fileUrl = await uploadDocument(context, category, inv.issueDate, `${baseName}.pdf`, buf);
-          archived++;
-        } else {
-          inv.fileUrl = ''; // dokument niedostępny — brak linku zamiast zepsutego
+        const mres = await fetch(`/api/infakt-manifest?type=${type}&id=${encodeURIComponent(inv.infaktId || '')}&uuid=${encodeURIComponent(inv.infaktUuid || '')}`);
+        const manifest = mres.ok ? await mres.json() : { documents: [] };
+        const docs: { name: string; url: string }[] = manifest.documents || [];
+        const baseName = (inv.number || `dokument-${i}`).replace(/[\\/:*?"<>|]/g, '-');
+        let firstUrl = '';
+        for (let di = 0; di < docs.length; di++) {
+          try {
+            const dres = await fetch(docs[di].url);
+            if (!dres.ok) continue;
+            const buf = await dres.arrayBuffer();
+            // nazwa: numer faktury + (sufiks dla kolejnych załączników)
+            const ext = (docs[di].name.split('.').pop() || 'pdf').toLowerCase();
+            const fname = di === 0 ? `${baseName}.${ext}` : `${baseName}_zal${di}_${docs[di].name}`;
+            const sp = await uploadDocument(context, category, inv.issueDate, fname, buf);
+            if (di === 0) firstUrl = sp;
+            archived++;
+          } catch { /* pojedynczy dokument nieudany — pomijamy */ }
         }
+        inv.fileUrl = firstUrl;
       } catch {
         inv.fileUrl = '';
       }

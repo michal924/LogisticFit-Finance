@@ -14,6 +14,8 @@ module.exports = async function (context, req) {
 
   const type = (req.query.type || 'sales').toLowerCase();
   const id = req.query.id;
+  const attIdx = req.query.att !== undefined ? parseInt(req.query.att, 10) : null;  // koszt: indeks załącznika
+  const attId = req.query.attId || null;  // faktura: id załącznika
   if (!id) { context.res = { status: 400, body: 'Brak id' }; return; }
 
   const H = { 'X-inFakt-ApiKey': apiKey };
@@ -22,15 +24,26 @@ module.exports = async function (context, req) {
     let pdfBuffer = null;
     let fileName = `dokument-${id}.pdf`;
 
-    if (type === 'cost') {
-      // Koszt — pobierz szczegół, wyciągnij file_url skanu
+    if (attId) {
+      // Załącznik faktury sprzedaży — pobierz metadane → download_link
+      const r = await fetch(`${INFAKT_BASE}/invoices/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attId)}.json`, { headers: { ...H, 'Accept': 'application/json' } });
+      if (!r.ok) { context.res = { status: r.status, body: 'inFakt załącznik: ' + (await r.text()).slice(0, 200) }; return; }
+      const meta = await r.json();
+      const link = meta.download_link || meta.file_url;
+      if (!link) { context.res = { status: 404, body: 'Brak download_link załącznika' }; return; }
+      fileName = meta.name || fileName;
+      const fr = await fetch(link);
+      if (!fr.ok) { context.res = { status: 502, body: 'Pobranie załącznika nieudane' }; return; }
+      pdfBuffer = Buffer.from(await fr.arrayBuffer());
+    } else if (type === 'cost') {
+      // Koszt — pobierz szczegół, wyciągnij file_url skanu (domyślnie [0], lub att=N)
       const detRes = await fetch(`${INFAKT_BASE}/documents/costs/${encodeURIComponent(id)}.json`, { headers: { ...H, 'Accept': 'application/json' } });
       if (!detRes.ok) { context.res = { status: detRes.status, body: 'inFakt koszt: ' + (await detRes.text()).slice(0, 200) }; return; }
       const det = await detRes.json();
-      const att = Array.isArray(det.attachments) ? det.attachments[0] : null;
-      if (!att || !att.file_url) { context.res = { status: 404, body: 'Koszt nie ma załączonego skanu' }; return; }
+      const idx = attIdx ?? 0;
+      const att = Array.isArray(det.attachments) ? det.attachments[idx] : null;
+      if (!att || !att.file_url) { context.res = { status: 404, body: 'Koszt nie ma skanu (idx ' + idx + ')' }; return; }
       fileName = att.file_name || fileName;
-      // file_url to bezpośredni (pre-signed) link S3 — pobieramy bez nagłówka inFakt
       const fileRes = await fetch(att.file_url);
       if (!fileRes.ok) { context.res = { status: 502, body: 'Pobranie skanu S3 nieudane' }; return; }
       pdfBuffer = Buffer.from(await fileRes.arrayBuffer());
