@@ -42,12 +42,13 @@ export default function FakturyKosztowe() {
   const fileRef = useRef<HTMLInputElement>(null);
   const today = new Date().toISOString().split('T')[0];
 
-  async function handleInfaktSync() {
-    setSyncing(true); setSyncMsg('Pobieram i archiwizuję faktury kosztowe z inFakt…');
+  async function handleInfaktSync(force = false) {
+    setSyncing(true);
+    setSyncMsg(force ? 'Pełna archiwizacja — pobieram wszystkie dokumenty i załączniki…' : 'Pobieram i archiwizuję faktury kosztowe z inFakt…');
     try {
       const r = await syncFromInfakt('cost', context, invoices, (done, total, arch) => {
-        setSyncMsg(`Synchronizuję… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
-      });
+        setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
+      }, force);
       setSyncMsg(`✓ Zsynchronizowano ${r.ok} faktur · zarchiwizowano ${r.archived} dokumentów w SharePoint`);
       await reload();
     } catch (e: any) {
@@ -155,10 +156,15 @@ export default function FakturyKosztowe() {
             </p>
           </div>
           {context !== 'prywatne' && (
-            <button onClick={handleInfaktSync} disabled={syncing} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: syncing ? 'var(--lf-slate-100)' : 'var(--accent)', color: syncing ? 'var(--fg-3)' : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
-              {syncing ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
-              {syncing ? 'Synchronizuję…' : 'Synchronizuj z inFakt'}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => handleInfaktSync(false)} disabled={syncing} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: syncing ? 'var(--lf-slate-100)' : 'var(--accent)', color: syncing ? 'var(--fg-3)' : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
+                {syncing ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
+                {syncing ? 'Synchronizuję…' : 'Synchronizuj z inFakt'}
+              </button>
+              <button onClick={() => handleInfaktSync(true)} disabled={syncing} title="Pełna re-archiwizacja wszystkich dokumentów i załączników" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--accent)', border: '1px solid var(--border-1)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
+                <Upload size={15} /> Pełna archiwizacja
+              </button>
+            </div>
           )}
         </div>
 

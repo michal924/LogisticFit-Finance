@@ -96,6 +96,7 @@ export async function syncFromInfakt(
   context: string,
   existing: Invoice[],
   onProgress?: (done: number, total: number, archived: number) => void,
+  force = false,   // true = pełna re-archiwizacja (ignoruje "już zarchiwizowane", dociąga załączniki)
 ): Promise<{ ok: number; archived: number; total: number }> {
   const fromInfakt = await fetchInfakt(type);
   const category = type === 'sales' ? 'Faktury sprzedaży' : 'Faktury kosztowe';
@@ -106,8 +107,8 @@ export async function syncFromInfakt(
     const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
     if (match) inv.spId = match.spId;
 
-    // Już zarchiwizowane wcześniej? → zachowaj kopię SharePoint, NIE pobieraj ponownie (bez duplikatów)
-    if (isArchived(match?.fileUrl)) {
+    // Już zarchiwizowane wcześniej? → zachowaj kopię SharePoint, pomiń (chyba że force = pełna re-archiwizacja)
+    if (!force && isArchived(match?.fileUrl)) {
       inv.fileUrl = match!.fileUrl;
     } else if (inv.infaktId || inv.infaktUuid) {
       // Pobierz MANIFEST wszystkich dokumentów (główny + załączniki) i zarchiwizuj każdy
