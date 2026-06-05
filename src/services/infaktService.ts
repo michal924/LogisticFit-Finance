@@ -58,7 +58,7 @@ export async function fetchInfakt(type: 'sales' | 'cost'): Promise<Invoice[]> {
     const items: any[] = data.items || [];
     if (!items.length) break;
     for (const raw of items) all.push(mapInfakt(raw, type));
-    if (items.length < 50) break; // ostatnia strona
+    if (items.length < 100) break; // ostatnia strona (limit=100)
     page++;
   }
   return all;

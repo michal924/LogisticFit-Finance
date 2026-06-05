@@ -16,10 +16,12 @@ module.exports = async function (context, req) {
 
   const type = (req.query.type || 'invoices').toLowerCase();   // invoices | costs
   const page = parseInt(req.query.page || '1', 10);
-  const endpoint = type === 'costs' ? 'costs' : 'invoices';
+  const limit = 100;
+  const offset = (page - 1) * limit;
 
-  // inFakt v3: stronicowanie ?page=N, domyślnie 100/str (offset/limit zależnie od wersji)
-  const url = `${INFAKT_BASE}/${endpoint}.json?page=${page}`;
+  // UWAGA: inFakt ma różne ścieżki — faktury /invoices.json, koszty /documents/costs.json
+  const path = type === 'costs' ? 'documents/costs' : 'invoices';
+  const url = `${INFAKT_BASE}/${path}.json?offset=${offset}&limit=${limit}`;
 
   try {
     const res = await fetch(url, {
