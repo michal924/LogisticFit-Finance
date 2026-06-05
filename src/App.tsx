@@ -14,6 +14,7 @@ const Kontrahenci      = React.lazy(() => import('./pages/Kontrahenci'));
 const Koszty           = React.lazy(() => import('./pages/Koszty'));
 const JPK              = React.lazy(() => import('./pages/JPK'));
 const Raporty          = React.lazy(() => import('./pages/Raporty'));
+const Dokumenty        = React.lazy(() => import('./pages/Dokumenty'));
 const Ustawienia       = React.lazy(() => import('./pages/Ustawienia'));
 
 function LoginRedirect() {
@@ -47,6 +48,7 @@ export default function App() {
                 <Route path="koszty" element={<Koszty />} />
                 <Route path="jpk" element={<JPK />} />
                 <Route path="raporty" element={<Raporty />} />
+                <Route path="dokumenty" element={<Dokumenty />} />
                 <Route path="ustawienia" element={<Ustawienia />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </Route>

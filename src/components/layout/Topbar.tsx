@@ -16,6 +16,7 @@ const CRUMBS: Record<string, [string, string]> = {
   'kontrahenci':       ['Analiza', 'Kontrahenci'],
   'koszty':            ['Analiza', 'Koszty'],
   'raporty':           ['Analiza', 'Raporty'],
+  'dokumenty':         ['Admin', 'Dokumenty'],
   'jpk':               ['Admin', 'JPK'],
   'ustawienia':        ['Admin', 'Ustawienia'],
 };

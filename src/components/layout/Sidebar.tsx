@@ -9,10 +9,10 @@ import { useContextStore } from '../../stores/contextStore';
 // Ekrany dostępne w każdym kontekście (id z NAV)
 const SCREENS_BY_CONTEXT: Record<string, string[]> = {
   // JDG i Spółka: pełen zakres
-  jdg:    ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'jpk', 'ustawienia'],
-  spolka: ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'jpk', 'ustawienia'],
-  // Prywatne: tylko przepływy + analiza, bez faktur/VAT/kontrahentów
-  prywatne: ['', 'bank-prywatny', 'koszty', 'raporty', 'ustawienia'],
+  jdg:    ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'dokumenty', 'jpk', 'ustawienia'],
+  spolka: ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'dokumenty', 'jpk', 'ustawienia'],
+  // Prywatne: tylko przepływy + analiza + dokumenty
+  prywatne: ['', 'bank-prywatny', 'koszty', 'raporty', 'dokumenty', 'ustawienia'],
 };
 
 // Finance brand mark — bar-chart + rising green arrow on deep-navy tile (znak własny, niesie własne tło)
@@ -46,6 +46,7 @@ const NAV = [
     { id: 'raporty',      path: '/raporty',      icon: 'BarChart', label: 'nav.reports' },
   ]},
   { section: 'sec.admin', items: [
+    { id: 'dokumenty',    path: '/dokumenty',    icon: 'FileText',    label: 'nav.documents' },
     { id: 'jpk',          path: '/jpk',          icon: 'ShieldCheck', label: 'nav.jpk',      admin: true },
     { id: 'ustawienia',   path: '/ustawienia',   icon: 'Settings',    label: 'nav.settings', admin: true },
   ]},

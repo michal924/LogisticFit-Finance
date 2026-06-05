@@ -128,6 +128,42 @@ export async function uploadDocument(
   return item.webUrl as string;
 }
 
+// Nazwa biblioteki dla kontekstu (eksport do UI)
+export function libraryForContext(context: string): string {
+  return LIBRARY_BY_CONTEXT[context] || 'Finance JDG';
+}
+
+export interface DriveEntry {
+  id: string;
+  name: string;
+  isFolder: boolean;
+  size?: number;
+  webUrl?: string;
+  childCount?: number;
+  lastModified?: string;
+}
+
+/** Listuje foldery i pliki w bibliotece dokumentów pod zadaną ścieżką (puste = root). */
+export async function listDocuments(context: string, path = ''): Promise<DriveEntry[]> {
+  const library = LIBRARY_BY_CONTEXT[context] || 'Finance JDG';
+  const driveId = await getDriveId(library);
+  const childrenPath = path
+    ? `${SITE}/drives/${driveId}/root:/${encodeURI(path)}:/children`
+    : `${SITE}/drives/${driveId}/root/children`;
+  const res = await graphFetch('GET', `${childrenPath}?$top=2000&$select=id,name,size,webUrl,folder,file,lastModifiedDateTime`);
+  const entries: DriveEntry[] = (res.value || []).map((it: any) => ({
+    id: it.id,
+    name: it.name,
+    isFolder: !!it.folder,
+    size: it.size,
+    webUrl: it.webUrl,
+    childCount: it.folder?.childCount,
+    lastModified: it.lastModifiedDateTime,
+  }));
+  // Foldery najpierw, potem pliki — alfabetycznie
+  return entries.sort((a, b) => (a.isFolder === b.isFolder ? a.name.localeCompare(b.name, 'pl') : a.isFolder ? -1 : 1));
+}
+
 export async function addListItem(displayName: string, fields: object) {
   const listId = await getListId(displayName);
   return graphFetch('POST', `${SITE}/lists/${listId}/items`, { fields });

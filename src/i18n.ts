@@ -18,6 +18,7 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   'nav.reports':        { pl: 'Raporty',                        en: 'Reports' },
   'nav.jpk':            { pl: 'JPK',                            en: 'JPK' },
   'nav.settings':       { pl: 'Ustawienia',                     en: 'Settings' },
+  'nav.documents':     { pl: 'Dokumenty',                en: 'Documents' },
   'common.all':         { pl: 'Wszystkie',                      en: 'All' },
   'common.export':      { pl: 'Eksportuj',                      en: 'Export' },
   'common.cancel':      { pl: 'Anuluj',                         en: 'Cancel' },
