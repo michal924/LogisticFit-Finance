@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { FileUp, Upload, Loader2, X, Check, Clock, Search, ChevronRight } from 'lucide-react';
+import { FileUp, Upload, Loader2, X, Check, Clock, Search, ChevronRight, RefreshCw } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
 import { uploadDocument } from '../services/graphService';
+import { fetchInfakt } from '../services/infaktService';
 
 type Filter = 'all' | 'paid' | 'pending' | 'overdue';
 
@@ -35,8 +36,28 @@ export default function FakturySprzedazy() {
   const [importSummary, setImportSummary] = useState<{ ok: number; total: number } | null>(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const today = new Date().toISOString().split('T')[0];
+
+  async function handleInfaktSync() {
+    setSyncing(true); setSyncMsg('Pobieram faktury sprzedaży z inFakt…');
+    try {
+      const fromInfakt = await fetchInfakt('sales');
+      let ok = 0;
+      for (const inv of fromInfakt) {
+        const existing = invoices.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
+        if (existing) { inv.spId = existing.spId; inv.paid = existing.paid; }
+        await saveInvoice(inv, context);
+        ok++;
+      }
+      setSyncMsg(`✓ Zsynchronizowano ${ok} faktur z inFakt`);
+      await reload();
+    } catch (e: any) {
+      setSyncMsg('Błąd inFakt: ' + (e.message || e));
+    } finally { setSyncing(false); }
+  }
 
   const reload = async () => {
     setLoading(true);
@@ -138,7 +159,21 @@ export default function FakturySprzedazy() {
               {' · '}opłacone: <strong style={{ color: '#239d46', fontFamily: 'JetBrains Mono, monospace' }}>{fmt(totalPaid)} PLN</strong>
             </p>
           </div>
+          {context !== 'prywatne' && (
+            <button onClick={handleInfaktSync} disabled={syncing} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: syncing ? 'var(--lf-slate-100)' : 'var(--accent)', color: syncing ? 'var(--fg-3)' : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
+              {syncing ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
+              {syncing ? 'Synchronizuję…' : 'Synchronizuj z inFakt'}
+            </button>
+          )}
         </div>
+
+        {syncMsg && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13, fontWeight: 600,
+            background: syncMsg.startsWith('✓') ? 'var(--lf-green-100)' : syncMsg.startsWith('Błąd') ? 'var(--lf-danger-bg)' : 'var(--lf-navy-100)',
+            color: syncMsg.startsWith('✓') ? 'var(--lf-green-900)' : syncMsg.startsWith('Błąd') ? 'var(--lf-danger)' : 'var(--lf-navy-700)' }}>
+            {syncMsg}
+          </div>
+        )}
 
         {/* Drag & Drop upload */}
         <div
