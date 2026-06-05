@@ -49,7 +49,8 @@ export default function FakturyKosztowe() {
       let ok = 0;
       for (const inv of fromInfakt) {
         const existing = invoices.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
-        if (existing) { inv.spId = existing.spId; inv.paid = existing.paid; }
+        // inFakt = źródło prawdy: zachowujemy spId (upsert) + fileUrl, ale status/kwoty bierzemy z inFakt
+        if (existing) { inv.spId = existing.spId; inv.fileUrl = existing.fileUrl; }
         await saveInvoice(inv, context);
         ok++;
       }

@@ -20,8 +20,17 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
   const dueDate = (pick(raw, 'payment_date', 'due_date', 'payment_due_date') || '').toString().split('T')[0];
   const counterparty = pick(raw, 'client_company_name', 'client_name', 'seller_name', 'contractor_name', 'company_name') || '';
   const nip = (pick(raw, 'client_nip', 'nip', 'client_tax_code', 'seller_tax_code', 'seller_nip') || '').toString();
+  // Status płatności — faktury: pole `status`/`paid_date`; koszty: tablica `statuses` (group=payment)
   const statusRaw = (pick(raw, 'status', 'payment_status') || '').toString().toLowerCase();
-  const paid = statusRaw.includes('paid') || statusRaw === 'opłacona' || !!pick(raw, 'paid_date');
+  let paid = statusRaw === 'paid' || statusRaw === 'opłacona' || !!pick(raw, 'paid_date');
+  if (Array.isArray(raw.statuses)) {
+    const payment = raw.statuses.find((s: any) => s && s.group === 'payment');
+    if (payment) paid = payment.symbol === 'paid';
+  }
+
+  // Link do PDF w inFakt — przez nasz backend (pobiera z inFakt po stronie serwera)
+  const infaktId = pick(raw, 'id', 'uuid');
+  const fileUrl = infaktId ? `/api/infakt-pdf?type=${type}&id=${encodeURIComponent(infaktId)}` : '';
 
   return {
     type,
@@ -37,6 +46,7 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
     currency: pick(raw, 'currency') || 'PLN',
     paid,
     notes: pick(raw, 'ksef_number') ? `KSeF: ${raw.ksef_number}` : '',
+    fileUrl,
   };
 }
 
