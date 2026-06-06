@@ -1,18 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
-import { ContractorsService, filterByContext } from '../services/graphService';
+import { getInvoices } from '../services/invoiceService';
 
 type Role = 'Klient' | 'Dostawca' | 'Oba';
-
-const ROLE_MAP: Record<string, Role> = {
-  client: 'Klient',
-  vendor: 'Dostawca',
-  both:   'Oba',
-  klient:  'Klient',
-  dostawca: 'Dostawca',
-  oba:     'Oba',
-};
 
 const ROLE_COLORS: Record<Role, string> = {
   Klient:   'var(--lf-green)',
@@ -45,22 +36,39 @@ export default function Kontrahenci() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    ContractorsService.getAll()
-      .then((rawItems: any[]) => {
-        const items = filterByContext(rawItems, context);
-        const mapped: Contractor[] = items.map(item => {
-          const f = item.fields || {};
-          const rawRole = (f.ContractorType || 'client').toLowerCase();
-          const role: Role = ROLE_MAP[rawRole] ?? 'Klient';
-          const name = f.ContractorName || '';
+    setLoading(true);
+    // Kontrahenci liczeni NA ŻYWO z faktur — zawsze aktualni po synchronizacji z inFakt.
+    // Sprzedaż → Klient, Koszty → Dostawca, oba → Oba. Grupowanie po NIP (lub nazwie).
+    Promise.all([getInvoices('sales', context), getInvoices('cost', context)])
+      .then(([sales, costs]) => {
+        type Agg = { name: string; nip: string; asClient: boolean; asVendor: boolean; invoices: number; totalNet: number; totalGross: number };
+        const map = new Map<string, Agg>();
+        const add = (inv: typeof sales[number], kind: 'sales' | 'cost') => {
+          const name = (inv.counterparty || '').trim();
+          const nip = (inv.nip || '').trim();
+          if (!name && !nip) return;
+          const key = nip || name.toLowerCase();
+          let a = map.get(key);
+          if (!a) { a = { name, nip, asClient: false, asVendor: false, invoices: 0, totalNet: 0, totalGross: 0 }; map.set(key, a); }
+          if (!a.name && name) a.name = name;
+          if ((!a.nip || a.nip === '—') && nip) a.nip = nip;
+          if (kind === 'sales') a.asClient = true; else a.asVendor = true;
+          a.invoices += 1;
+          a.totalNet += inv.netTotal || 0;
+          a.totalGross += inv.grossTotal || 0;
+        };
+        sales.forEach(i => add(i, 'sales'));
+        costs.forEach(i => add(i, 'cost'));
+        const mapped: Contractor[] = Array.from(map.values()).map(a => {
+          const role: Role = a.asClient && a.asVendor ? 'Oba' : a.asVendor ? 'Dostawca' : 'Klient';
           return {
-            name,
-            nip: f.NIP || '—',
+            name: a.name,
+            nip: a.nip || '—',
             role,
-            initials: name.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || '??',
-            invoices: f.InvoiceCount ?? 0,
-            totalNet: f.TotalNet ?? 0,
-            totalGross: f.TotalGross ?? 0,
+            initials: a.name.split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '??',
+            invoices: a.invoices,
+            totalNet: a.totalNet,
+            totalGross: a.totalGross,
           };
         });
         mapped.sort((a, b) => b.totalGross - a.totalGross);
