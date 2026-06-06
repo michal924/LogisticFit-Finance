@@ -71,6 +71,18 @@ export async function fetchTax(type: 'saf_v7' | 'income' | 'vat_eu' | 'books' | 
   return data.items || [];
 }
 
+// Pobiera szczegół jednego rekordu podatkowego (np. KPiR books/{id} z pełnymi pozycjami i danymi firmy)
+export async function fetchTaxDetail(type: 'saf_v7' | 'income' | 'books' | 'insurance', id: string | number): Promise<any> {
+  const res = await fetch(`/api/infakt-tax?type=${type}&id=${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    let msg = 'Błąd pobierania szczegółu z inFakt';
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  return data.item;
+}
+
 // Pobiera wszystkie strony danego typu z inFakt (przez backend)
 export async function fetchInfakt(type: 'sales' | 'cost'): Promise<Invoice[]> {
   const endpoint = type === 'sales' ? 'invoices' : 'costs';

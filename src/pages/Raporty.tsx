@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
-import { fetchTax } from '../services/infaktService';
+import { fetchTax, fetchTaxDetail } from '../services/infaktService';
+import { getInvoices } from '../services/invoiceService';
+import { uploadDocument } from '../services/graphService';
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -89,6 +91,56 @@ export default function Raporty() {
   ];
   const duesTotal = dues.reduce((s, d) => s + d.amount, 0);
 
+  // Generowanie miesięcznego PDF (z danych inFakt + rejestry z faktur) + archiwizacja do SharePoint
+  const [gen, setGen] = useState(false);
+  const [genMsg, setGenMsg] = useState('');
+
+  async function generatePdf() {
+    if (!bCur) { setGenMsg('Brak danych KPiR za ten miesiąc w inFakt.'); return; }
+    setGen(true); setGenMsg('');
+    try {
+      // dane podatkowe są dla JDG — rejestry VAT z faktur JDG za wybrany miesiąc
+      const [detail, sales, costs] = await Promise.all([
+        fetchTaxDetail('books', bCur.id),
+        getInvoices('sales', 'jdg'),
+        getInvoices('cost', 'jdg'),
+      ]);
+      const inMonth = (x: any) => (x.issueDate || '').startsWith(selKey);
+      const salesReg = sales.filter(inMonth).map(x => ({ number: x.number, date: x.issueDate, name: x.counterparty, nip: x.nip, net: x.netTotal, vat: x.vatTotal, gross: x.grossTotal }));
+      const costReg = costs.filter(inMonth).map(x => ({ number: x.number, date: x.issueDate, name: x.counterparty, nip: x.nip, net: x.netTotal, vat: x.vatTotal }));
+      const company = detail?.company || { name: 'Michał Rzeźnik LogisticFit', taxid: '9182077986', full_address: '' };
+
+      const { generateMonthlyReport } = await import('../services/reportPdf');
+      const doc = generateMonthlyReport({
+        company: { name: company.name, taxid: company.taxid, address: company.full_address || '' },
+        periodName: `${MONTHS_PL[selMonth]} ${selYear}`,
+        summary: {
+          income, expenses, profit,
+          vatNal: salesReg.reduce((s, r) => s + r.vat, 0),
+          vatNacz: costReg.reduce((s, r) => s + r.vat, 0),
+          vatDue: vatPay, pitDue: gr(pCur?.to_pay_price), zus: zusPay,
+        },
+        salesReg, costReg,
+      });
+
+      const fname = `Raport_${selKey}_${MONTHS_PL[selMonth]}.pdf`;
+      doc.save(fname);  // pobranie lokalne
+
+      // archiwizacja do SharePoint (biblioteka JDG, folder Rozliczenia)
+      try {
+        const ab = doc.output('arraybuffer');
+        await uploadDocument('jdg', 'Rozliczenia', `${selKey}-01`, fname, ab);
+        setGenMsg(`✓ PDF wygenerowany i zarchiwizowany w SharePoint (Rozliczenia).`);
+      } catch (upErr: any) {
+        setGenMsg(`✓ PDF pobrany. Archiwizacja do SharePoint nieudana: ${upErr?.message || 'błąd'}`);
+      }
+    } catch (e: any) {
+      setGenMsg(`Błąd generowania: ${e?.message || e}`);
+    } finally {
+      setGen(false);
+    }
+  }
+
   return (
     <div>
       <div className="page-h">
@@ -103,8 +155,18 @@ export default function Raporty() {
           <select value={selYear} onChange={e => setSelYear(Number(e.target.value))} style={{ fontSize: '0.85rem' }}>
             {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
+          <button className="btn btn-primary" onClick={generatePdf} disabled={gen || loading}>
+            {gen ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <Ico name="Download" size={15} />}
+            {gen ? 'Generuję…' : 'Generuj PDF'}
+          </button>
         </div>
       </div>
+
+      {genMsg && (
+        <div style={{ marginBottom: 16, padding: '9px 14px', borderRadius: 8, fontSize: 13, background: genMsg.startsWith('✓') ? 'var(--lf-green-100)' : 'var(--lf-danger-bg)', color: genMsg.startsWith('✓') ? 'var(--lf-green-700)' : 'var(--lf-danger)', border: `1px solid ${genMsg.startsWith('✓') ? '#bce3c9' : '#fecaca'}` }}>
+          {genMsg}
+        </div>
+      )}
 
       {context !== 'jdg' && (
         <div style={{ background: 'var(--lf-warning-bg)', border: '1px solid #f0e0b8', borderRadius: 8, padding: '9px 14px', fontSize: 13, color: 'var(--lf-warning)', marginBottom: 16 }}>
