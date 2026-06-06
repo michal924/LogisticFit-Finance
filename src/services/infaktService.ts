@@ -58,6 +58,19 @@ function mapInfakt(raw: any, type: 'sales' | 'cost'): Invoice {
   };
 }
 
+// Pobiera dane podatkowe z inFakt (JPK_V7 / PIT / VAT-UE) — surowe rekordy.
+// Kwoty w groszach (÷100). Dane dotyczą całego konta inFakt (nie per-context).
+export async function fetchTax(type: 'saf_v7' | 'income' | 'vat_eu'): Promise<any[]> {
+  const res = await fetch(`/api/infakt-tax?type=${type}&page=1`);
+  if (!res.ok) {
+    let msg = 'Błąd pobierania danych podatkowych z inFakt';
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  return data.items || [];
+}
+
 // Pobiera wszystkie strony danego typu z inFakt (przez backend)
 export async function fetchInfakt(type: 'sales' | 'cost'): Promise<Invoice[]> {
   const endpoint = type === 'sales' ? 'invoices' : 'costs';

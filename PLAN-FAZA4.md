@@ -35,39 +35,36 @@ Biblioteka Finance Spółka → ⚙ → *Library settings* → *Permissions for 
 
 ---
 
-## B. Retencja 5 lat — Finance JDG + Finance Spółka
+## B. Retencja 5 lat — bez Purview (Business Standard)
 
-**Decyzja:** 5-letnia polityka retencji na bibliotekach **JDG i Spółka** (Prywatne pomijamy).
-Cel: pliki nie mogą zostać usunięte przez 5 lat od utworzenia (zgodność księgowa — art. 74 UoR / 5 lat podatkowo).
+**Ustalenie (sprawdzone `check-m365-license.mjs`):** tenant ma **Microsoft 365 Business Standard**
+[`O365_BUSINESS_PREMIUM`, 3/3]. **Business Standard NIE zawiera polityk retencji Purview** —
+opcja nie pojawi się w portalu. Retencja wymaga Business Premium / E3 / E5.
 
-> Prawdziwa, wymuszona retencja = **Microsoft Purview**. Nie ustawia się jej niezawodnie przez API
-> (wymaga roli *Compliance Administrator* / *Records Management*). Poniżej kroki w portalu.
+> Purview porzucony świadomie — nie dopłacamy. Obowiązek 5 lat (art. 74 UoR) spełnia
+> **redundancja**: dokumenty są w SharePoint + inFakt (system źródłowy) + lokalny backup.
 
-### Krok po kroku (purview.microsoft.com)
-1. Wejdź na **https://purview.microsoft.com** → zaloguj jako admin.
-2. Lewe menu: **Solutions → Data Lifecycle Management** (dawniej *Information Governance*).
-3. Zakładka **Retention policies** → **＋ New retention policy**.
-4. Nazwa: `Finance – retencja 5 lat (JDG + Spółka)`.
-5. **Retention settings:**
-   - *Retain items for a specific period* → **5 years**.
-   - Liczone od: **When items were created**.
-   - Po okresie: **Do nothing** (lub *Delete* — zalecane: *Do nothing*, sam zdecydujesz później).
-6. **Locations (zakres):** wyłącz wszystko oprócz **SharePoint sites** → *Edit* → **Choose sites**
-   → wklej adres: `https://logisticfit.sharepoint.com/sites/finance`.
-7. **Przejrzyj i utwórz.** Wdrożenie polityki: do 1–7 dni (Microsoft propaguje w tle).
+### Zabezpieczenia zastosowane zamiast Purview
+1. **Wersjonowanie** — biblioteki SharePoint mają domyślnie włączone (historia wersji + kosz 93 dni).
+   Weryfikacja: biblioteka → ⚙ → *Library settings* → *Versioning settings* → *Create major versions* = ON.
+2. **Tylko odczyt dla nie-właścicieli** — księgowa i przyszli użytkownicy dostają Read (część A),
+   więc nie mogą usuwać. Aplikacja zapisuje creds. właściciela.
+   > Haczyk: właściciela (Michał) na Business Standard nie da się zablokować przed usuwaniem —
+   > twarda immutabilność istnieje tylko w Purview. Stąd backup poniżej.
+3. **Backup offline (3. kopia)** — `backup-finance-docs.mjs` pobiera wszystkie biblioteki na dysk:
+   ```bash
+   cd ~/Cash-app/setup && node backup-finance-docs.mjs
+   ```
+   Cel: `~/LogisticFit-Finance-Backup/<data>/<biblioteka>/...`. Wznawialny (pomija pobrane).
+   **Zalecenie: uruchamiać co miesiąc/kwartał** (można dodać do harmonogramu).
 
-### Zakres: cała witryna finance (DECYZJA: Opcja 1)
-Polityka obejmuje **całą witrynę** `/sites/finance` → JDG + Spółka + **Prywatne**.
-Wybrano dla prostoty — jedna polityka, zero dodatkowej pracy, a prywatne dokumenty
-i tak warto trzymać 5 lat. W kroku 6 wystarczy wskazać tę jedną witrynę.
-
-### Weryfikacja retencji
-- Po wdrożeniu spróbuj usunąć testowy plik z Finance Spółka → trafia do *Preservation Hold Library*
-  (kopia zachowana mimo „usunięcia") — to potwierdza, że retencja działa.
-- Purview → *Data Lifecycle Management → Policies* → status polityki = **On (success)**.
+### Gdyby kiedyś jednak Purview (po upgrade do Business Premium)
+Patrz historia git tej sekcji — kroki: purview.microsoft.com → Data Lifecycle Management →
+Retention policies → 5 lat od utworzenia → zakres: witryna `/sites/finance`.
 
 ---
 
 ## Status
 - [ ] A. Uprawnienia księgowej (skrypt) — czeka na e-mail księgowej
-- [ ] B. Retencja Purview — konfiguracja w portalu (ręczna, admin compliance)
+- [x] B. Retencja — Purview niedostępny (Business Standard); zamiast tego wersjonowanie +
+      read-only + backup offline (`backup-finance-docs.mjs`). Pozostaje uruchamiać backup cyklicznie.
