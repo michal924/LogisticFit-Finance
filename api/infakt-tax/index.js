@@ -12,6 +12,8 @@ const RESOURCES = {
   saf_v7: 'saf_v7_files',     // JPK_V7
   income: 'income_taxes',     // podatek dochodowy (PIT)
   vat_eu: 'vat_eu_taxes',     // VAT-UE
+  books: 'books',             // KPiR (księga przychodów i rozchodów)
+  insurance: 'insurance_fees',// ZUS
 };
 
 module.exports = async function (context, req) {
