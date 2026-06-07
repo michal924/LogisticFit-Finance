@@ -5,6 +5,13 @@ import { libraryForContext } from '../services/graphService';
 import { getContext } from '../stores/contextStore';
 import { getInvoices } from '../services/invoiceService';
 import type { Invoice } from '../types';
+import MultiSelectChip from '../components/MultiSelectChip';
+
+const MONTH_OPTS = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień']
+  .map((label, i) => ({ value: String(i + 1).padStart(2, '0'), label }));
+const TYPE_CHIPS: { v: 'all' | 'sales' | 'cost'; label: string }[] = [
+  { v: 'all', label: 'Wszystkie' }, { v: 'sales', label: 'Sprzedaż' }, { v: 'cost', label: 'Koszty' },
+];
 
 function fmtMoney(n: number): string {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -27,9 +34,9 @@ export default function Dokumenty() {
   // filtry
   const [search, setSearch] = useState('');
   const [fType, setFType] = useState<'all' | 'sales' | 'cost'>('all');
-  const [fCat, setFCat] = useState('all');
-  const [fFrom, setFFrom] = useState('');
-  const [fTo, setFTo] = useState('');
+  const [selCats, setSelCats] = useState<string[]>([]);
+  const [selYears, setSelYears] = useState<string[]>([]);
+  const [selMonths, setSelMonths] = useState<string[]>([]);
 
   const library = libraryForContext(context);
   const ctx = getContext(context as any);
@@ -48,27 +55,30 @@ export default function Dokumenty() {
       .finally(() => setLoading(false));
   }, [context]);
 
-  // unikalne kategorie kosztów (do dropdownu)
-  const categories = useMemo(() => {
+  // opcje do multiselectów
+  const catOpts = useMemo(() => {
     const set = new Set<string>();
     rows.forEach(r => { if (r.type === 'cost' && r.category) set.add(r.category); });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pl'));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pl')).map(c => ({ value: c, label: c }));
   }, [rows]);
+  const yearOpts = useMemo(() =>
+    Array.from(new Set(rows.map(r => (r.issueDate || '').slice(0, 4)).filter(Boolean)))
+      .sort((a, b) => b.localeCompare(a)).map(y => ({ value: y, label: y })), [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter(r => {
       if (fType !== 'all' && r.type !== fType) return false;
-      if (fCat !== 'all' && (r.category || '') !== fCat) return false;
-      if (fFrom && r.issueDate < fFrom) return false;
-      if (fTo && r.issueDate > fTo) return false;
+      if (selCats.length && !selCats.includes(r.category || '')) return false;
+      if (selYears.length && !selYears.includes((r.issueDate || '').slice(0, 4))) return false;
+      if (selMonths.length && !selMonths.includes((r.issueDate || '').slice(5, 7))) return false;
       if (q && !(r.number.toLowerCase().includes(q) || r.counterparty.toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [rows, search, fType, fCat, fFrom, fTo]);
+  }, [rows, search, fType, selCats, selYears, selMonths]);
 
-  const hasFilters = !!(search || fType !== 'all' || fCat !== 'all' || fFrom || fTo);
-  function clearFilters() { setSearch(''); setFType('all'); setFCat('all'); setFFrom(''); setFTo(''); }
+  const hasFilters = !!(search || fType !== 'all' || selCats.length || selYears.length || selMonths.length);
+  function clearFilters() { setSearch(''); setFType('all'); setSelCats([]); setSelYears([]); setSelMonths([]); }
 
   function openDoc(r: DocRow) {
     const url = r.attachments?.[0]?.url || r.fileUrl;
@@ -91,46 +101,32 @@ export default function Dokumenty() {
       </div>
 
       {/* Filtry */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
-          <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-3)', display: 'flex' }}>
-            <Ico name="Search" size={15} />
-          </span>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Szukaj: numer, kontrahent, kategoria…"
-            style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: 8, border: '1px solid var(--border-1)', fontSize: 13, background: '#fff' }}
-          />
-        </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Typ — chipy */}
+        {TYPE_CHIPS.map(t => (
+          <button key={t.v} onClick={() => setFType(t.v)}
+            style={{ padding: '5px 14px', borderRadius: 999, fontSize: 13, fontWeight: 500, border: '1px solid', cursor: 'pointer', background: fType === t.v ? 'var(--accent)' : '#fff', color: fType === t.v ? '#fff' : 'var(--fg-2)', borderColor: fType === t.v ? 'var(--accent)' : 'var(--border)' }}>
+            {t.label}
+          </button>
+        ))}
 
-        <select value={fType} onChange={e => setFType(e.target.value as any)}
-          style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border-1)', fontSize: 13, background: '#fff', cursor: 'pointer' }}>
-          <option value="all">Typ: wszystkie</option>
-          <option value="sales">Sprzedaż</option>
-          <option value="cost">Koszty</option>
-        </select>
-
-        <select value={fCat} onChange={e => setFCat(e.target.value)} disabled={categories.length === 0}
-          style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border-1)', fontSize: 13, background: '#fff', cursor: categories.length ? 'pointer' : 'default', opacity: categories.length ? 1 : 0.5 }}>
-          <option value="all">Kategoria: wszystkie</option>
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--fg-3)' }}>
-          <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)}
-            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-1)', fontSize: 13, background: '#fff' }} />
-          <span>–</span>
-          <input type="date" value={fTo} onChange={e => setFTo(e.target.value)}
-            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-1)', fontSize: 13, background: '#fff' }} />
-        </div>
+        <MultiSelectChip label="Kategoria" options={catOpts} selected={selCats} onChange={setSelCats} width={220} />
+        <MultiSelectChip label="Rok" options={yearOpts} selected={selYears} onChange={setSelYears} width={140} />
+        <MultiSelectChip label="Miesiąc" options={MONTH_OPTS} selected={selMonths} onChange={setSelMonths} width={180} />
 
         {hasFilters && (
           <button onClick={clearFilters}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-1)', background: '#fff', fontSize: 13, color: 'var(--fg-2)', cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999, border: '1px solid var(--border)', background: '#fff', fontSize: 13, color: 'var(--fg-2)', cursor: 'pointer' }}>
             <Ico name="X" size={14} /> Wyczyść
           </button>
         )}
+
+        {/* Szukaj — zaokrąglone (pigułka) */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid var(--border)', borderRadius: 999, padding: '6px 14px', minWidth: 220 }}>
+          <Ico name="Search" size={15} style={{ opacity: 0.4, flexShrink: 0 }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj: numer, kontrahent…"
+            style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, width: '100%', color: 'var(--fg-1)' }} />
+        </div>
       </div>
 
       {error && (
