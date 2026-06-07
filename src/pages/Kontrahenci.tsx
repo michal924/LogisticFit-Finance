@@ -88,6 +88,13 @@ export default function Kontrahenci() {
       .finally(() => setLoading(false));
   }, [context]);
 
+  // Metryki zależne od aktywnego filtra: Klient → sprzedaż, Dostawca → koszty, inaczej → łącznie
+  const metric = (c: Contractor) =>
+    filter === 'Klient' ? { count: c.salesCount, net: c.salesNet, gross: c.salesGross } :
+    filter === 'Dostawca' ? { count: c.costCount, net: c.costNet, gross: c.costGross } :
+    { count: c.invoices, net: c.totalNet, gross: c.totalGross };
+  const turnoverSuffix = filter === 'Klient' ? ' (sprzedaż)' : filter === 'Dostawca' ? ' (koszty)' : '';
+
   const rows = contractors.filter(c => {
     const matchRole =
       filter === 'Wszystkie' ? true :
@@ -97,7 +104,7 @@ export default function Kontrahenci() {
     const q = search.toLowerCase();
     const matchSearch = !q || c.name.toLowerCase().includes(q) || c.nip.includes(q);
     return matchRole && matchSearch;
-  });
+  }).sort((a, b) => metric(b).gross - metric(a).gross);
 
   if (loading) {
     return (
@@ -143,8 +150,8 @@ export default function Kontrahenci() {
                   <th>NIP</th>
                   <th>Rola</th>
                   <th style={{ textAlign: 'center' }}>Faktury</th>
-                  <th style={{ textAlign: 'right' }}>Obrót netto (PLN)</th>
-                  <th style={{ textAlign: 'right' }}>Obrót brutto (PLN)</th>
+                  <th style={{ textAlign: 'right' }}>Obrót netto{turnoverSuffix} (PLN)</th>
+                  <th style={{ textAlign: 'right' }}>Obrót brutto{turnoverSuffix} (PLN)</th>
                   <th></th>
                 </tr>
               </thead>
@@ -154,6 +161,7 @@ export default function Kontrahenci() {
                 )}
                 {rows.map(c => {
                   const open = expanded === c.key;
+                  const m = metric(c);
                   return (
                     <Fragment key={c.key}>
                       <tr onClick={() => setExpanded(open ? null : c.key)} style={{ cursor: 'pointer', background: open ? 'var(--lf-navy-50, #f0f4ff)' : undefined }}>
@@ -174,9 +182,9 @@ export default function Kontrahenci() {
                             <span className="badge" style={{ background: `${ROLE_COLORS[c.role]}20`, color: ROLE_COLORS[c.role], border: `1px solid ${ROLE_COLORS[c.role]}40` }}>{c.role}</span>
                           )}
                         </td>
-                        <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)' }}>{c.invoices}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmt(c.totalNet)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(c.totalGross)}</td>
+                        <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)' }}>{m.count}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmt(m.net)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(m.gross)}</td>
                         <td style={{ textAlign: 'center' }}>
                           <Ico name="ChevronRight" size={16} style={{ color: 'var(--fg-3)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
                         </td>
