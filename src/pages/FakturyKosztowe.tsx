@@ -1,11 +1,12 @@
 // Identyczny ekran co FakturySprzedazy — tylko typ "cost"
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Upload, FileUp, Loader2, X, Check, Clock, Search, ChevronRight, RefreshCw } from 'lucide-react';
+import { Upload, Loader2, X, Check, Search, ChevronRight, RefreshCw } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
 import { uploadDocument } from '../services/graphService';
 import { syncFromInfakt, autoSyncData } from '../services/infaktService';
+import InvoiceDetail from '../components/InvoiceDetail';
 
 type Filter = 'all' | 'paid' | 'pending' | 'overdue';
 
@@ -160,8 +161,7 @@ export default function FakturyKosztowe() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 24, height: '100%' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+    <div>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--lf-navy-900)', margin: 0 }}>Faktury kosztowe</h1>
@@ -263,8 +263,9 @@ export default function FakturyKosztowe() {
                 const s = statusBadge(inv);
                 const isActive = selected?.spId === inv.spId;
                 return (
-                  <tr key={inv.spId} onClick={() => setSelected(inv)}
-                    style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isActive ? '#f4f6fb' : '#fff' }}
+                  <Fragment key={inv.spId}>
+                  <tr onClick={() => setSelected(isActive ? null : inv)}
+                    style={{ borderBottom: isActive ? 'none' : '1px solid var(--border)', cursor: 'pointer', background: isActive ? '#f4f6fb' : '#fff' }}
                     onMouseEnter={e => !isActive && (e.currentTarget.style.background = '#f8f9fd')}
                     onMouseLeave={e => !isActive && (e.currentTarget.style.background = '#fff')}>
                     <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--accent)' }}>{inv.number}</td>
@@ -274,77 +275,23 @@ export default function FakturyKosztowe() {
                     <td style={{ padding: '10px 14px', fontFamily: 'JetBrains Mono, monospace', textAlign: 'right', color: 'var(--fg-3)' }}>{fmt(inv.vatTotal)}</td>
                     <td style={{ padding: '10px 14px', fontFamily: 'JetBrains Mono, monospace', textAlign: 'right', fontWeight: 600 }}>{fmt(inv.grossTotal)}</td>
                     <td style={{ padding: '10px 14px' }}><span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, color: s.color, background: s.bg }}>{s.label}</span></td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center' }}><ChevronRight size={15} color="var(--fg-3)" /></td>
+                    <td style={{ padding: '10px 14px', textAlign: 'center' }}><ChevronRight size={15} color="var(--fg-3)" style={{ transform: isActive ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} /></td>
                   </tr>
+                  {isActive && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 0, background: '#f9fafd', borderBottom: '2px solid var(--accent)' }}>
+                        <div style={{ padding: '18px 20px' }}>
+                          <InvoiceDetail inv={inv} onTogglePaid={togglePaid} onEdit={(i) => { setEditing(i); setShowForm(true); }} onDelete={handleDelete} />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
-      </div>
-
-      {selected && (
-        <div style={{ width: 360, flexShrink: 0, background: '#fff', borderRadius: 10, border: '1px solid var(--border)', padding: 20, alignSelf: 'flex-start', position: 'sticky', top: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>{selected.number}</div>
-              <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{selected.counterparty}</div>
-            </div>
-            <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-3)' }}><X size={18} /></button>
-          </div>
-          {(() => { const s = statusBadge(selected); return <span style={{ padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, color: s.color, background: s.bg, display: 'inline-block', marginBottom: 16 }}>{s.label}</span>; })()}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', marginBottom: 16, fontSize: 13 }}>
-            {[['Data wystawienia', selected.issueDate], ['Termin płatności', selected.dueDate], ['NIP', selected.nip || '—'], ['Waluta', selected.currency]].map(([l, v]) => (
-              <div key={l}><div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 2 }}>{l}</div><div style={{ fontWeight: 500 }}>{v}</div></div>
-            ))}
-          </div>
-          <div style={{ background: '#f4f6fb', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>
-            {[['Netto', fmt(selected.netTotal)], ['VAT', fmt(selected.vatTotal)]].map(([l, v]) => (
-              <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, color: 'var(--fg-2)' }}>
-                <span>{l}</span><span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{v} PLN</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-              <span>Brutto</span><span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{fmt(selected.grossTotal)} PLN</span>
-            </div>
-          </div>
-          {selected.lines?.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', marginBottom: 8 }}>POZYCJE</div>
-              {selected.lines.map((line, i) => (
-                <div key={i} style={{ fontSize: 12, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontWeight: 500 }}>{line.description}</div>
-                  <div style={{ color: 'var(--fg-3)', marginTop: 2 }}>{line.quantity} × {fmt(line.unitPrice)} · VAT {line.vatRate}% · <strong>{fmt(line.grossAmount)} PLN</strong></div>
-                </div>
-              ))}
-            </div>
-          )}
-          {(selected.attachments?.length || selected.fileUrl) && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', marginBottom: 6 }}>DOKUMENTY</div>
-              {(selected.attachments?.length
-                ? selected.attachments
-                : [{ name: 'Dokument (oryginał)', url: selected.fileUrl! }]
-              ).map((doc, i) => (
-                <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 6, background: 'var(--lf-navy-50, #f0f4ff)', border: '1px solid var(--lf-navy-200, #c7d0ec)', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
-                  <FileUp size={14} style={{ flexShrink: 0 }} />
-                  <span style={{ flex: 1 }}>{doc.name}</span>
-                  <ChevronRight size={14} />
-                </a>
-              ))}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => togglePaid(selected)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: selected.paid ? '#fff' : '#239d46', color: selected.paid ? 'var(--fg-2)' : '#fff', border: `1px solid ${selected.paid ? 'var(--border)' : '#239d46'}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              {selected.paid ? <Clock size={14} /> : <Check size={14} />}
-              {selected.paid ? 'Nieopłacona' : 'Opłacona'}
-            </button>
-            <button onClick={() => { setEditing(selected); setShowForm(true); }} style={{ padding: '8px 14px', background: '#fff', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: 'var(--fg-2)' }}>Edytuj</button>
-            <button onClick={() => handleDelete(selected)} style={{ padding: '8px 14px', background: '#fff', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#c8362d' }}>Usuń</button>
-          </div>
-        </div>
-      )}
 
       {showForm && <InvoiceModal invoice={editing} type="cost" onSave={handleSave} onClose={() => { setShowForm(false); setEditing(null); }} />}
     </div>
