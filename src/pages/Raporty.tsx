@@ -83,22 +83,22 @@ export default function Raporty() {
   const vatPay = gr(jCur?.tax_to_pay_price);
   const zusPay = gr(zCur?.sum_amount_price);
 
-  // KPiR — ostatnie 12 miesięcy + suma roczna
+  // KPiR — wybrany rok (styczeń–grudzień) + suma roczna
   const monthly = useMemo(() => {
     const rows: any[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    for (let m = 0; m < 12; m++) {
+      const key = `${selYear}-${String(m + 1).padStart(2, '0')}`;
       const b = byPeriod(books, key);
       rows.push({
-        key, label: `${MONTH_SHORT[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+        key, label: MONTH_SHORT[m],
         income: gr(b?.income_price), expenses: gr(b?.expenses_price), profit: gr(b?.profit_price), has: !!b,
       });
     }
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [books]);
-  const ytd = monthly.filter(m => m.key.startsWith(String(selYear)));
+  }, [books, selYear]);
+  const hasYearData = monthly.some(m => m.has);
+  const ytd = monthly;
   const ytdSum = ytd.reduce((a, m) => ({ income: a.income + m.income, expenses: a.expenses + m.expenses, profit: a.profit + m.profit }), { income: 0, expenses: 0, profit: 0 });
 
   // Zobowiązania do zapłaty (wybrany miesiąc/kwartał)
@@ -195,6 +195,13 @@ export default function Raporty() {
         <div style={{ background: 'var(--lf-danger-bg)', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px', fontSize: 14, color: 'var(--lf-danger)' }}>{err}</div>
       ) : (
         <>
+          {!hasYearData && (
+            <div style={{ background: 'var(--lf-warning-bg)', border: '1px solid #f0e0b8', borderRadius: 8, padding: '9px 14px', fontSize: 13, color: 'var(--lf-warning)', marginBottom: 16 }}>
+              <Ico name="AlertTriangle" size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+              Brak danych KPiR za {selYear} w inFakt. Jeśli w tym roku obowiązywał <strong>ryczałt</strong>, rozliczenie jest w inFakt jako ewidencja przychodów (inny typ niż KPiR) — nie pojawia się w tym zestawieniu.
+            </div>
+          )}
+
           {/* KPI z KPiR (oficjalne) */}
           <div className="grid cols-4" style={{ marginBottom: '1.5rem', gridTemplateColumns: 'repeat(5, 1fr)' }}>
             <div className="kpi">
