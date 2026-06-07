@@ -6,8 +6,12 @@ import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../se
 import { uploadDocument } from '../services/graphService';
 import { syncFromInfakt, autoSyncData } from '../services/infaktService';
 import InvoiceDetail from '../components/InvoiceDetail';
+import MultiSelectChip from '../components/MultiSelectChip';
 
 type Filter = 'all' | 'paid' | 'pending' | 'overdue';
+
+const MONTH_OPTS = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień']
+  .map((label, i) => ({ value: String(i + 1).padStart(2, '0'), label }));
 
 type PdfItem = { name: string; status: 'processing' | 'done' | 'error' };
 
@@ -35,8 +39,8 @@ export default function FakturySprzedazy() {
   const [dragOver, setDragOver] = useState(false);
   const [pdfQueue, setPdfQueue] = useState<PdfItem[]>([]);
   const [importSummary, setImportSummary] = useState<{ ok: number; total: number } | null>(null);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [selYears, setSelYears] = useState<string[]>([]);
+  const [selMonths, setSelMonths] = useState<string[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -86,10 +90,13 @@ export default function FakturySprzedazy() {
     if (filter === 'overdue' && (inv.paid || inv.dueDate >= today)) return false;
     if (search && !inv.counterparty.toLowerCase().includes(search.toLowerCase()) &&
         !inv.number.toLowerCase().includes(search.toLowerCase())) return false;
-    if (dateFrom && inv.issueDate < dateFrom) return false;
-    if (dateTo && inv.issueDate > dateTo) return false;
+    if (selYears.length && !selYears.includes((inv.issueDate || '').slice(0, 4))) return false;
+    if (selMonths.length && !selMonths.includes((inv.issueDate || '').slice(5, 7))) return false;
     return true;
   });
+
+  const yearOpts = Array.from(new Set(invoices.map(i => (i.issueDate || '').slice(0, 4)).filter(Boolean)))
+    .sort((a, b) => b.localeCompare(a)).map(y => ({ value: y, label: y }));
 
   const totalGross = filtered.reduce((s, i) => s + i.grossTotal, 0);
   const totalPaid  = filtered.filter(i => i.paid).reduce((s, i) => s + i.grossTotal, 0);
@@ -235,11 +242,8 @@ export default function FakturySprzedazy() {
               {f === 'all' ? 'Wszystkie' : f === 'paid' ? 'Opłacone' : f === 'pending' ? 'Oczekuje' : 'Przeterminowane'}
             </button>
           ))}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="Od" style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--fg-2)' }} />
-            <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>–</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="Do" style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--fg-2)' }} />
-          </div>
+          <MultiSelectChip label="Rok" options={yearOpts} selected={selYears} onChange={setSelYears} width={140} />
+          <MultiSelectChip label="Miesiąc" options={MONTH_OPTS} selected={selMonths} onChange={setSelMonths} width={180} />
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px' }}>
             <Search size={14} color="var(--fg-3)" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj..." style={{ border: 'none', outline: 'none', fontSize: 13, width: 160, color: 'var(--fg-1)' }} />
