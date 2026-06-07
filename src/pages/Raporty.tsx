@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
 import { fetchTax, fetchTaxDetail } from '../services/infaktService';
 import { getInvoices } from '../services/invoiceService';
-import { uploadDocument } from '../services/graphService';
+import { uploadDocument, listDocuments } from '../services/graphService';
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -39,6 +39,7 @@ export default function Raporty() {
   const [pit, setPit] = useState<any[]>([]);
   const [zus, setZus] = useState<any[]>([]);
   const [err, setErr] = useState('');
+  const [reports, setReports] = useState<{ name: string; url: string; folder: string }[]>([]);
 
   useEffect(() => {
     setLoading(true); setErr('');
@@ -47,6 +48,23 @@ export default function Raporty() {
       .catch(e => setErr(e.message || 'Błąd pobierania danych z inFakt'))
       .finally(() => setLoading(false));
   }, []);
+
+  // Lista zarchiwizowanych raportów PDF z SharePoint (folder Rozliczenia/{rok})
+  async function loadReports() {
+    try {
+      const months = await listDocuments('jdg', `Rozliczenia/${selYear}`);
+      const all: { name: string; url: string; folder: string }[] = [];
+      for (const m of months.filter(x => x.isFolder)) {
+        try {
+          const files = await listDocuments('jdg', `Rozliczenia/${selYear}/${m.name}`);
+          files.filter(f => !f.isFolder).forEach(f => all.push({ name: f.name, url: f.webUrl || '', folder: m.name }));
+        } catch { /* pusty/niedostępny folder */ }
+      }
+      all.sort((a, b) => b.folder.localeCompare(a.folder));
+      setReports(all);
+    } catch { setReports([]); }
+  }
+  useEffect(() => { loadReports(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [selYear]);
 
   const selKey = `${selYear}-${String(selMonth + 1).padStart(2, '0')}`;
   const byPeriod = (arr: any[], key: string) => arr.find(x => (x.period || '').startsWith(key));
@@ -124,20 +142,10 @@ export default function Raporty() {
       });
 
       const fname = `Raport_${selKey}_${MONTHS_PL[selMonth]}.pdf`;
-      // pobranie lokalne
-      const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = fname; document.body.appendChild(a); a.click();
-      a.remove(); URL.revokeObjectURL(url);
-
-      // archiwizacja do SharePoint (biblioteka JDG, folder Rozliczenia)
-      try {
-        await uploadDocument('jdg', 'Rozliczenia', `${selKey}-01`, fname, bytes);
-        setGenMsg(`✓ PDF wygenerowany i zarchiwizowany w SharePoint (Rozliczenia).`);
-      } catch (upErr: any) {
-        setGenMsg(`✓ PDF pobrany. Archiwizacja do SharePoint nieudana: ${upErr?.message || 'błąd'}`);
-      }
+      // archiwizacja do SharePoint (biblioteka JDG, folder Rozliczenia) — bez pobierania lokalnego
+      await uploadDocument('jdg', 'Rozliczenia', `${selKey}-01`, fname, bytes);
+      setGenMsg(`✓ Raport ${MONTHS_PL[selMonth]} ${selYear} zapisany w SharePoint. Ponowne generowanie nadpisze ten sam plik.`);
+      await loadReports();
     } catch (e: any) {
       setGenMsg(`Błąd generowania: ${e?.message || e}`);
     } finally {
@@ -293,7 +301,7 @@ export default function Raporty() {
                     <table className="table">
                       <thead><tr><th>Okres</th><th>Status</th><th style={{ textAlign: 'right' }}>VAT do zapłaty</th><th style={{ textAlign: 'right' }}>Termin</th></tr></thead>
                       <tbody>
-                        {jpk.slice(0, 14).map(j => (
+                        {jpk.map(j => (
                           <tr key={j.id}>
                             <td>{j.period_name} <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{j.symbol}</span></td>
                             <td><StatusBadge status={j.status} /></td>
@@ -316,7 +324,7 @@ export default function Raporty() {
                     <table className="table">
                       <thead><tr><th>Okres</th><th style={{ textAlign: 'right' }}>Zaliczka</th><th>Status</th></tr></thead>
                       <tbody>
-                        {pit.slice(0, 10).map(p => (
+                        {pit.map(p => (
                           <tr key={p.id}>
                             <td>{p.period_name} <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{p.symbol}</span></td>
                             <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(gr(p.to_pay_price))}</td>
@@ -328,6 +336,70 @@ export default function Raporty() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* ZUS — pełna historia */}
+          <div className="card" style={{ marginTop: '1.5rem' }}>
+            <div className="card-head"><span>ZUS — składki</span><span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 400 }}>źródło: inFakt</span></div>
+            <div className="card-body" style={{ padding: 0 }}>
+              {zus.length === 0 ? <div style={{ padding: '1rem 1.25rem', color: 'var(--fg-3)', fontSize: 13 }}>Brak danych</div> : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead><tr>
+                      <th>Okres</th>
+                      <th style={{ textAlign: 'right' }}>Społeczne</th>
+                      <th style={{ textAlign: 'right' }}>Zdrowotne</th>
+                      <th style={{ textAlign: 'right' }}>Suma</th>
+                      <th style={{ textAlign: 'right' }}>Termin</th>
+                      <th>Status</th>
+                    </tr></thead>
+                    <tbody>
+                      {zus.map(z => (
+                        <tr key={z.id}>
+                          <td>{z.period_name}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--fg-3)' }}>{fmt(gr(z.social_amount_price))}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--fg-3)' }}>{fmt(gr(z.health_amount_price))}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(gr(z.sum_amount_price))}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--fg-3)', fontSize: 12 }}>{z.payment_date || '—'}</td>
+                          <td><StatusBadge status={z.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Zarchiwizowane raporty PDF z SharePoint */}
+          <div className="card" style={{ marginTop: '1.5rem' }}>
+            <div className="card-head"><span>Zarchiwizowane raporty · {selYear}</span><span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 400 }}>SharePoint · Rozliczenia</span></div>
+            <div className="card-body" style={{ padding: 0 }}>
+              {reports.length === 0 ? (
+                <div style={{ padding: '1rem 1.25rem', color: 'var(--fg-3)', fontSize: 13 }}>
+                  Brak zapisanych raportów za {selYear}. Wybierz miesiąc i kliknij „Generuj PDF" — raport zapisze się tutaj.
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead><tr><th>Miesiąc</th><th>Plik</th><th style={{ textAlign: 'right' }}>Akcja</th></tr></thead>
+                    <tbody>
+                      {reports.map((r, i) => (
+                        <tr key={i}>
+                          <td>{r.folder}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-2)' }}>{r.name}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <a href={r.url} target="_blank" rel="noreferrer" className="btn" style={{ padding: '4px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                              <Ico name="ArrowUpRight" size={13} /> Otwórz
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
 
