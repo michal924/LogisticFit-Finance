@@ -111,7 +111,7 @@ export default function Raporty() {
       const company = detail?.company || { name: 'Michał Rzeźnik LogisticFit', taxid: '9182077986', full_address: '' };
 
       const { generateMonthlyReport } = await import('../services/reportPdf');
-      const doc = generateMonthlyReport({
+      const bytes = await generateMonthlyReport({
         company: { name: company.name, taxid: company.taxid, address: company.full_address || '' },
         periodName: `${MONTHS_PL[selMonth]} ${selYear}`,
         summary: {
@@ -124,12 +124,16 @@ export default function Raporty() {
       });
 
       const fname = `Raport_${selKey}_${MONTHS_PL[selMonth]}.pdf`;
-      doc.save(fname);  // pobranie lokalne
+      // pobranie lokalne
+      const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
 
       // archiwizacja do SharePoint (biblioteka JDG, folder Rozliczenia)
       try {
-        const ab = doc.output('arraybuffer');
-        await uploadDocument('jdg', 'Rozliczenia', `${selKey}-01`, fname, ab);
+        await uploadDocument('jdg', 'Rozliczenia', `${selKey}-01`, fname, bytes);
         setGenMsg(`✓ PDF wygenerowany i zarchiwizowany w SharePoint (Rozliczenia).`);
       } catch (upErr: any) {
         setGenMsg(`✓ PDF pobrany. Archiwizacja do SharePoint nieudana: ${upErr?.message || 'błąd'}`);
