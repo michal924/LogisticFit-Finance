@@ -40,11 +40,13 @@ export default function Raporty() {
   const [zus, setZus] = useState<any[]>([]);
   const [err, setErr] = useState('');
   const [reports, setReports] = useState<{ name: string; url: string; folder: string }[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
+  const [costs, setCosts] = useState<any[]>([]);
 
   useEffect(() => {
     setLoading(true); setErr('');
-    Promise.all([fetchTax('books'), fetchTax('saf_v7'), fetchTax('income'), fetchTax('insurance')])
-      .then(([b, j, p, z]) => { setBooks(b); setJpk(j); setPit(p); setZus(z); })
+    Promise.all([fetchTax('books'), fetchTax('saf_v7'), fetchTax('income'), fetchTax('insurance'), getInvoices('sales', 'jdg'), getInvoices('cost', 'jdg')])
+      .then(([b, j, p, z, s, c]) => { setBooks(b); setJpk(j); setPit(p); setZus(z); setSales(s as any[]); setCosts(c as any[]); })
       .catch(e => setErr(e.message || 'Błąd pobierania danych z inFakt'))
       .finally(() => setLoading(false));
   }, []);
@@ -77,9 +79,12 @@ export default function Raporty() {
   const zCur = byPeriod(zus, selKey);
   const pCur = byPeriod(pit, pitKey);
 
-  const income = gr(bCur?.income_price);
-  const expenses = gr(bCur?.expenses_price);
-  const profit = gr(bCur?.profit_price);
+  // Fallback dla lat ryczałtowych (brak KPiR) — przychód/koszty liczone z faktur
+  const invSum = (arr: any[], key: string) => arr.filter(x => (x.issueDate || '').startsWith(key)).reduce((s, x) => s + (x.netTotal || 0), 0);
+  const booksForYear = books.some(b => (b.period || '').startsWith(String(selYear)));
+  const income = bCur ? gr(bCur.income_price) : invSum(sales, selKey);
+  const expenses = bCur ? gr(bCur.expenses_price) : invSum(costs, selKey);
+  const profit = bCur ? gr(bCur.profit_price) : (income - expenses);
   const vatPay = gr(jCur?.tax_to_pay_price);
   const zusPay = gr(zCur?.sum_amount_price);
 
@@ -89,14 +94,16 @@ export default function Raporty() {
     for (let m = 0; m < 12; m++) {
       const key = `${selYear}-${String(m + 1).padStart(2, '0')}`;
       const b = byPeriod(books, key);
+      const inc = b ? gr(b.income_price) : invSum(sales, key);
+      const exp = b ? gr(b.expenses_price) : invSum(costs, key);
       rows.push({
         key, label: MONTH_SHORT[m],
-        income: gr(b?.income_price), expenses: gr(b?.expenses_price), profit: gr(b?.profit_price), has: !!b,
+        income: inc, expenses: exp, profit: b ? gr(b.profit_price) : (inc - exp), has: !!b || inc !== 0 || exp !== 0,
       });
     }
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [books, selYear]);
+  }, [books, sales, costs, selYear]);
   const hasYearData = monthly.some(m => m.has);
   const ytd = monthly;
   const ytdSum = ytd.reduce((a, m) => ({ income: a.income + m.income, expenses: a.expenses + m.expenses, profit: a.profit + m.profit }), { income: 0, expenses: 0, profit: 0 });
@@ -195,10 +202,16 @@ export default function Raporty() {
         <div style={{ background: 'var(--lf-danger-bg)', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px', fontSize: 14, color: 'var(--lf-danger)' }}>{err}</div>
       ) : (
         <>
+          {!booksForYear && hasYearData && (
+            <div style={{ background: 'var(--lf-navy-100)', border: '1px solid var(--lf-navy-200, #c7d0ec)', borderRadius: 8, padding: '9px 14px', fontSize: 13, color: 'var(--lf-navy-700)', marginBottom: 16 }}>
+              <Ico name="AlertTriangle" size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+              Rok {selYear}: brak KPiR w inFakt (np. <strong>ryczałt</strong>). Przychód i koszty liczone z <strong>faktur</strong> (orientacyjnie). VAT, PIT i ZUS pozostają z oficjalnego rozliczenia inFakt.
+            </div>
+          )}
           {!hasYearData && (
             <div style={{ background: 'var(--lf-warning-bg)', border: '1px solid #f0e0b8', borderRadius: 8, padding: '9px 14px', fontSize: 13, color: 'var(--lf-warning)', marginBottom: 16 }}>
               <Ico name="AlertTriangle" size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
-              Brak danych KPiR za {selYear} w inFakt. Jeśli w tym roku obowiązywał <strong>ryczałt</strong>, rozliczenie jest w inFakt jako ewidencja przychodów (inny typ niż KPiR) — nie pojawia się w tym zestawieniu.
+              Brak danych za {selYear} — ani KPiR/rozliczenia, ani faktur w tym roku.
             </div>
           )}
 
@@ -207,12 +220,12 @@ export default function Raporty() {
             <div className="kpi">
               <div className="label"><span className="ico"><Ico name="TrendUp" size={15} /></span>Przychód</div>
               <div className="value" style={{ color: 'var(--lf-green)' }}>{fmt(income)} <span className="unit">PLN</span></div>
-              <div className="delta">KPiR · {MONTHS_PL[selMonth]}</div>
+              <div className="delta">{booksForYear ? "KPiR" : "z faktur"} · {MONTHS_PL[selMonth]}</div>
             </div>
             <div className="kpi">
               <div className="label"><span className="ico"><Ico name="TrendDown" size={15} /></span>Koszty</div>
               <div className="value" style={{ color: 'var(--lf-danger)' }}>{fmt(expenses)} <span className="unit">PLN</span></div>
-              <div className="delta">KPiR · {MONTHS_PL[selMonth]}</div>
+              <div className="delta">{booksForYear ? "KPiR" : "z faktur"} · {MONTHS_PL[selMonth]}</div>
             </div>
             <div className="kpi" style={{ background: 'var(--lf-navy-900)', color: '#fff' }}>
               <div className="label" style={{ color: 'rgba(255,255,255,0.6)' }}>Dochód</div>
@@ -234,7 +247,7 @@ export default function Raporty() {
           {/* Zobowiązania do zapłaty + KPiR historia */}
           <div className="grid split-2-1" style={{ marginBottom: '1.5rem' }}>
             <div className="card">
-              <div className="card-head"><span>Historia miesięczna · KPiR</span><span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 400 }}>źródło: inFakt</span></div>
+              <div className="card-head"><span>Historia miesięczna · {booksForYear ? "KPiR" : "z faktur"}</span><span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 400 }}>{booksForYear ? "źródło: inFakt" : "orientacyjnie z faktur"}</span></div>
               <div className="card-body" style={{ padding: 0 }}>
                 <div className="table-wrap">
                   <table className="table">
