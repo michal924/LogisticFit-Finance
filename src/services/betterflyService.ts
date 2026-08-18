@@ -31,7 +31,7 @@ function dateOnly(v: any): string {
   return (v || '').toString().split('T')[0];
 }
 
-// Kontrahent bywa obiektem ({ Name, Nip, ... }) albo samym stringiem/ID — obsługujemy oba
+// Kontrahent bywa obiektem ({ Name, Nip, ... }) albo samym stringiem — obsługujemy oba
 function partyName(party: any): string {
   if (!party) return '';
   if (typeof party === 'string') return party;
@@ -43,12 +43,19 @@ function partyNip(party: any): string {
   return String(pick(party, 'Nip', 'NIP', 'TaxNumber', 'VatNumber') || '');
 }
 
-// Mapuje rekord Betterfly → nasz Invoice
-function mapBetterfly(raw: any, type: 'sales' | 'cost'): Invoice {
-  // Sprzedaż: nabywcą jest PurchasingParty. Zakup: sprzedawcą jest SellingParty.
+type CustomerInfo = { name: string; nip: string };
+
+// Mapuje rekord Betterfly → nasz Invoice.
+// custMap: Id kontrahenta → {name, nip} — rejestr VAT zakupu podaje tylko CustomerId.
+function mapBetterfly(raw: any, type: 'sales' | 'cost', custMap?: Map<string, CustomerInfo>): Invoice {
+  // Sprzedaż: nabywcą jest PurchasingParty. Zakup/koszt: obiekt strony bywa nieobecny —
+  // wtedy rozwiązujemy CustomerId z mapy kontrahentów.
   const party = type === 'sales'
     ? pick(raw, 'PurchasingParty', 'ReceivingParty', 'Customer')
     : pick(raw, 'SellingParty', 'Seller', 'Supplier', 'Customer');
+
+  const custId = pick(raw, 'CustomerId', 'SellingPartyId', 'PurchasingPartyId', 'ReceivingPartyId');
+  const fromMap = custId !== undefined && custMap ? custMap.get(String(custId)) : undefined;
 
   const number = pick(raw, 'Number', 'FullNumber', 'DocumentNumber') || '';
   const issueDate = dateOnly(pick(raw, 'IssueDate', 'SalesDate', 'PurchaseDate'));
@@ -57,8 +64,8 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost'): Invoice {
   // PaymentStatus: 0 = niezapłacona, 1 = zapłacona całkowicie, 2 = częściowo
   const payStatus = Number(pick(raw, 'PaymentStatus') ?? 0);
 
-  // Numer obcy przy fakturach zakupu + oznaczenie dokumentu w buforze (Status 0)
-  const refNumber = pick(raw, 'ReferenceNumber');
+  // Numer obcy + oznaczenie korekty/bufora + płatność częściowa
+  const refNumber = pick(raw, 'ReferenceNumber', 'CorrectedDocumentNumber');
   const notes = [
     refNumber ? `Nr obcy: ${refNumber}` : '',
     Number(pick(raw, 'Status') ?? 1) === 0 ? 'Dokument w buforze' : '',
@@ -72,8 +79,8 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost'): Invoice {
     number: String(number),
     issueDate,
     dueDate: dueDate || issueDate,
-    counterparty: partyName(party),
-    nip: partyNip(party),
+    counterparty: partyName(party) || fromMap?.name || (custId !== undefined ? `Kontrahent #${custId}` : ''),
+    nip: partyNip(party) || fromMap?.nip || '',
     lines: [],
     netTotal: num(pick(raw, 'NetTotal', 'CurrencyNetTotal')),
     vatTotal: num(pick(raw, 'VatTotal', 'CurrencyVatTotal')),
@@ -86,13 +93,11 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost'): Invoice {
   };
 }
 
-// Pobiera wszystkie strony danego typu z Betterfly (przez backend)
-export async function fetchBetterfly(type: 'sales' | 'cost'): Promise<Invoice[]> {
-  const endpoint = type === 'sales' ? 'invoices' : 'purchase';
-  const all: Invoice[] = [];
+// Pobiera surowe strony danego zasobu z backendu Betterfly
+async function fetchAllRaw(endpoint: string): Promise<any[]> {
+  const all: any[] = [];
   let page = 1;
   const maxPages = 100; // bezpiecznik (strona = 50 rekordów)
-
   while (page <= maxPages) {
     const res = await fetch(`/api/betterfly-sync?type=${endpoint}&page=${page}`);
     if (!res.ok) {
@@ -102,12 +107,36 @@ export async function fetchBetterfly(type: 'sales' | 'cost'): Promise<Invoice[]>
     }
     const data = await res.json();
     const items: any[] = data.items || [];
-    if (!items.length) break;
-    for (const raw of items) all.push(mapBetterfly(raw, type));
+    all.push(...items);
     if (items.length < (data.pageSize || 50)) break; // ostatnia strona
     page++;
   }
   return all;
+}
+
+// Buduje mapę Id kontrahenta → {nazwa, NIP}. Rejestr VAT zakupu podaje tylko CustomerId,
+// więc nazwy dociągamy z osobnego zasobu /customers.
+async function fetchCustomerMap(): Promise<Map<string, CustomerInfo>> {
+  const map = new Map<string, CustomerInfo>();
+  try {
+    const rows = await fetchAllRaw('customers');
+    for (const c of rows) {
+      const id = pick(c, 'Id', 'ID', 'id');
+      if (id === undefined) continue;
+      map.set(String(id), {
+        name: String(pick(c, 'Name', 'CompanyName', 'FullName', 'DisplayName') || ''),
+        nip: String(pick(c, 'Nip', 'NIP', 'TaxNumber', 'VatNumber') || ''),
+      });
+    }
+  } catch { /* brak dostępu do customers — nazwy zostaną jako "Kontrahent #id" */ }
+  return map;
+}
+
+// Pobiera wszystkie faktury danego typu z Betterfly (przez backend), z nazwami kontrahentów
+export async function fetchBetterfly(type: 'sales' | 'cost'): Promise<Invoice[]> {
+  const endpoint = type === 'sales' ? 'invoices' : 'purchase';
+  const [rows, custMap] = await Promise.all([fetchAllRaw(endpoint), fetchCustomerMap()]);
+  return rows.map(raw => mapBetterfly(raw, type, custMap));
 }
 
 /**

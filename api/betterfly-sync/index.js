@@ -7,8 +7,18 @@
 // ============================================================
 
 const BF_BASE = 'https://app.comarchbetterfly.pl';
-const BF_VERSION = 'v1.4';
 const PAGE_SIZE = 50;
+
+// Zasób + wersja API zależą od typu dokumentu (ustalone diagnostyką ?probe=1):
+//  - sprzedaż: v1.5/invoices
+//  - koszt: v1.4/vatpurchasebooks (rejestr VAT zakupu — tam trafiają "koszty" z Betterfly;
+//           purchaseinvoices to osobny, u nas pusty typ)
+//  - customers: v1.2/customers (rozwiązywanie CustomerId → nazwa/NIP)
+const RESOURCE_MAP = {
+  invoices:  { path: 'invoices',         ver: 'v1.5' },
+  purchase:  { path: 'vatpurchasebooks', ver: 'v1.4' },
+  customers: { path: 'customers',        ver: 'v1.2' },
+};
 
 // Token OAuth2 żyje 600 s. Cache w pamięci instancji (warm start) z marginesem 60 s.
 let tokenCache = { value: '', expiresAt: 0 };
@@ -52,12 +62,9 @@ module.exports = async function (context, req) {
     return;
   }
 
-  const type = (req.query.type || 'invoices').toLowerCase();   // invoices | purchase
+  const type = (req.query.type || 'invoices').toLowerCase();   // invoices | purchase | customers
   const page = parseInt(req.query.page || '1', 10);
   const skip = (page - 1) * PAGE_SIZE;
-
-  // Faktury sprzedaży /invoices, faktury zakupu /purchaseinvoices
-  const TYPE_PATH = { invoices: 'invoices', purchase: 'purchaseinvoices' };
 
   // Tryb diagnostyczny ?probe=1 — omiata warianty zasobów/wersji, żeby ustalić który
   // endpoint faktycznie zawiera dane (koszt bywa w vatpurchasebooks, nie purchaseinvoices).
@@ -95,9 +102,11 @@ module.exports = async function (context, req) {
     return;
   }
 
-  const path = TYPE_PATH[type] || 'invoices';
-  const qs = `$orderby=${encodeURIComponent('IssueDate desc, Id desc')}&$skip=${skip}&$top=${PAGE_SIZE}`;
-  const url = `${BF_BASE}/api2/public/${BF_VERSION}/${path}?${qs}`;
+  const rsc = RESOURCE_MAP[type] || RESOURCE_MAP.invoices;
+  // customers nie mają IssueDate — sortujemy tylko po Id; dokumenty po dacie wystawienia
+  const orderby = type === 'customers' ? 'Id desc' : 'IssueDate desc, Id desc';
+  const qs = `$orderby=${encodeURIComponent(orderby)}&$skip=${skip}&$top=${PAGE_SIZE}`;
+  const url = `${BF_BASE}/api2/public/${rsc.ver}/${rsc.path}?${qs}`;
 
   try {
     const token = await getToken(clientId, clientSecret);
