@@ -57,7 +57,41 @@ module.exports = async function (context, req) {
   const skip = (page - 1) * PAGE_SIZE;
 
   // Faktury sprzedaży /invoices, faktury zakupu /purchaseinvoices
-  const path = type === 'purchase' ? 'purchaseinvoices' : 'invoices';
+  const TYPE_PATH = { invoices: 'invoices', purchase: 'purchaseinvoices' };
+
+  // Tryb diagnostyczny ?probe=1 — omiata warianty zasobów/wersji, żeby ustalić który
+  // endpoint faktycznie zawiera dane (koszt bywa w vatpurchasebooks, nie purchaseinvoices).
+  if (req.query.probe) {
+    const RESOURCES = ['invoices', 'purchaseinvoices', 'vatpurchasebooks', 'correctiveinvoices', 'advanceinvoices'];
+    const VERSIONS = ['v1.5', 'v1.4', 'v1.2'];
+    try {
+      const token = await getToken(clientId, clientSecret);
+      const results = [];
+      for (const ver of VERSIONS) {
+        for (const rsc of RESOURCES) {
+          const u = `${BF_BASE}/api2/public/${ver}/${rsc}?$top=1`;
+          try {
+            const r = await fetch(u, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } });
+            const txt = await r.text();
+            let count = null, keys = null;
+            try {
+              const j = JSON.parse(txt);
+              const arr = Array.isArray(j) ? j : (j.Items || j.items || j.Data || j.data || j.Results || j.value || null);
+              count = Array.isArray(arr) ? arr.length : null;
+              keys = Array.isArray(j) ? 'array' : Object.keys(j).slice(0, 8);
+            } catch { /* nie-JSON */ }
+            results.push({ ver, rsc, status: r.status, count, keys, snippet: r.ok ? undefined : txt.slice(0, 120) });
+          } catch (e) { results.push({ ver, rsc, error: String(e.message || e) }); }
+        }
+      }
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: { probe: results } };
+    } catch (e) {
+      context.res = { status: 500, body: { error: 'Probe: ' + (e.message || String(e)) } };
+    }
+    return;
+  }
+
+  const path = TYPE_PATH[type] || 'invoices';
   const qs = `$orderby=${encodeURIComponent('IssueDate desc, Id desc')}&$skip=${skip}&$top=${PAGE_SIZE}`;
   const url = `${BF_BASE}/api2/public/${BF_VERSION}/${path}?${qs}`;
 
