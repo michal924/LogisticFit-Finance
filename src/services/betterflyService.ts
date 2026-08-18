@@ -125,7 +125,7 @@ async function fetchCustomerMap(): Promise<Map<string, CustomerInfo>> {
       if (id === undefined) continue;
       map.set(String(id), {
         name: String(pick(c, 'Name', 'CompanyName', 'FullName', 'DisplayName') || ''),
-        nip: String(pick(c, 'Nip', 'NIP', 'TaxNumber', 'VatNumber') || ''),
+        nip: String(pick(c, 'CustomerTaxNumber', 'Nip', 'NIP', 'TaxNumber', 'VatNumber') || ''),
       });
     }
   } catch { /* brak dostępu do customers — nazwy zostaną jako "Kontrahent #id" */ }
