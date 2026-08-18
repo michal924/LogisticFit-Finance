@@ -80,7 +80,11 @@ module.exports = async function (context, req) {
               count = Array.isArray(arr) ? arr.length : null;
               keys = Array.isArray(j) ? 'array' : Object.keys(j).slice(0, 8);
             } catch { /* nie-JSON */ }
-            results.push({ ver, rsc, status: r.status, count, keys, snippet: r.ok ? undefined : txt.slice(0, 120) });
+            let sample;
+            if (req.query.full && count > 0) {
+              try { const j2 = JSON.parse(txt); const arr2 = Array.isArray(j2) ? j2 : (j2.Items || j2.items || j2.Data || j2.data || j2.Results || j2.value); sample = arr2[0]; } catch {}
+            }
+            results.push({ ver, rsc, status: r.status, count, keys, sample, snippet: r.ok ? undefined : txt.slice(0, 120) });
           } catch (e) { results.push({ ver, rsc, error: String(e.message || e) }); }
         }
       }
