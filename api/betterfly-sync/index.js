@@ -1,0 +1,102 @@
+// ============================================================
+//  Finance LogisticFit — Backend: pobieranie faktur z Comarch Betterfly
+//  Używane dla kontekstu SPÓŁKA (JDG korzysta z inFakt — patrz infakt-sync).
+//  Sekrety serwer-side: BETTERFLY_CLIENT_ID + BETTERFLY_CLIENT_SECRET.
+//  Endpoint: GET /api/betterfly-sync?type=invoices|purchase&page=1[&raw=1]
+//  Tylko ODCZYT (GET) — nic nie zapisujemy do Betterfly.
+// ============================================================
+
+const BF_BASE = 'https://app.comarchbetterfly.pl';
+const BF_VERSION = 'v1.4';
+const PAGE_SIZE = 50;
+
+// Token OAuth2 żyje 600 s. Cache w pamięci instancji (warm start) z marginesem 60 s.
+let tokenCache = { value: '', expiresAt: 0 };
+
+async function getToken(clientId, clientSecret) {
+  if (tokenCache.value && Date.now() < tokenCache.expiresAt) return tokenCache.value;
+
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const res = await fetch(`${BF_BASE}/api2/public/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${basic}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+    },
+    body: 'grant_type=client_credentials',
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Autoryzacja Betterfly (${res.status}): ${txt.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const token = data.access_token || data.accessToken;
+  if (!token) throw new Error('Betterfly nie zwrócił access_token');
+
+  const ttl = Number(data.expires || data.expires_in || 600);
+  tokenCache = { value: token, expiresAt: Date.now() + Math.max(60, ttl - 60) * 1000 };
+  return token;
+}
+
+module.exports = async function (context, req) {
+  const clientId = process.env.BETTERFLY_CLIENT_ID;
+  const clientSecret = process.env.BETTERFLY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    context.res = {
+      status: 500,
+      body: { error: 'Brak BETTERFLY_CLIENT_ID / BETTERFLY_CLIENT_SECRET w konfiguracji serwera' },
+    };
+    return;
+  }
+
+  const type = (req.query.type || 'invoices').toLowerCase();   // invoices | purchase
+  const page = parseInt(req.query.page || '1', 10);
+  const skip = (page - 1) * PAGE_SIZE;
+
+  // Faktury sprzedaży /invoices, faktury zakupu /purchaseinvoices
+  const path = type === 'purchase' ? 'purchaseinvoices' : 'invoices';
+  const qs = `$orderby=${encodeURIComponent('IssueDate desc, Id desc')}&$skip=${skip}&$top=${PAGE_SIZE}`;
+  const url = `${BF_BASE}/api2/public/${BF_VERSION}/${path}?${qs}`;
+
+  try {
+    const token = await getToken(clientId, clientSecret);
+
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      context.res = { status: res.status, body: { error: 'Betterfly API: ' + txt.slice(0, 400) } };
+      return;
+    }
+
+    const data = await res.json();
+    // Kształt odpowiedzi nie jest udokumentowany — normalizujemy jak przy inFakt
+    const items = Array.isArray(data)
+      ? data
+      : (data.Items || data.items || data.Data || data.data || data.Results || data.value || []);
+
+    // ?raw=1 — podgląd surowego pierwszego rekordu (weryfikacja nazw pól i jednostek kwot)
+    if (req.query.raw) {
+      context.res = {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: { type, page, count: items.length, sample: items[0] || null, envelope: Array.isArray(data) ? 'array' : Object.keys(data) },
+      };
+      return;
+    }
+
+    context.res = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: { type, page, count: items.length, pageSize: PAGE_SIZE, items },
+    };
+  } catch (e) {
+    context.res = { status: 500, body: { error: 'Wyjątek serwera: ' + (e.message || String(e)) } };
+  }
+};

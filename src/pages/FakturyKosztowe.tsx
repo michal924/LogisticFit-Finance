@@ -6,6 +6,7 @@ import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
 import { uploadDocument } from '../services/graphService';
 import { syncFromInfakt, autoSyncData } from '../services/infaktService';
+import { syncFromBetterfly, autoSyncDataBetterfly } from '../services/betterflyService';
 import InvoiceDetail from '../components/InvoiceDetail';
 import MultiSelectChip from '../components/MultiSelectChip';
 
@@ -47,17 +48,29 @@ export default function FakturyKosztowe() {
   const fileRef = useRef<HTMLInputElement>(null);
   const today = new Date().toISOString().split('T')[0];
 
+  // Spółka księgowana w Comarch Betterfly, JDG w inFakt
+  const isBetterfly = context === 'spolka';
+  const providerName = isBetterfly ? 'Comarch Betterfly' : 'inFakt';
+
   async function handleInfaktSync(force = false) {
     setSyncing(true);
-    setSyncMsg(force ? 'Pełna archiwizacja — pobieram wszystkie dokumenty i załączniki…' : 'Pobieram i archiwizuję faktury kosztowe z inFakt…');
+    setSyncMsg(isBetterfly
+      ? 'Pobieram faktury zakupu z Comarch Betterfly…'
+      : (force ? 'Pełna archiwizacja — pobieram wszystkie dokumenty i załączniki…' : 'Pobieram i archiwizuję faktury kosztowe z inFakt…'));
     try {
-      const r = await syncFromInfakt('cost', context, invoices, (done, total, arch) => {
-        setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
-      }, force);
-      setSyncMsg(`✓ Zsynchronizowano ${r.ok} faktur · zarchiwizowano ${r.archived} dokumentów w SharePoint`);
+      const r = isBetterfly
+        ? await syncFromBetterfly('cost', context, invoices, (done, total) => {
+            setSyncMsg(`Synchronizuję… ${done}/${total}`);
+          })
+        : await syncFromInfakt('cost', context, invoices, (done, total, arch) => {
+            setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
+          }, force);
+      setSyncMsg(isBetterfly
+        ? `✓ Zsynchronizowano ${r.ok} faktur z Comarch Betterfly`
+        : `✓ Zsynchronizowano ${r.ok} faktur · zarchiwizowano ${r.archived} dokumentów w SharePoint`);
       await reload();
     } catch (e: any) {
-      setSyncMsg('Błąd inFakt: ' + (e.message || e));
+      setSyncMsg(`Błąd ${providerName}: ` + (e.message || e));
     } finally { setSyncing(false); }
   }
 
@@ -79,8 +92,10 @@ export default function FakturyKosztowe() {
     sessionStorage.setItem(key, String(Date.now()));
     (async () => {
       try {
-        const n = await autoSyncData('cost', context, invoices);
-        if (n > 0) { setSyncMsg(`✓ Auto-zsynchronizowano ${n} faktur z inFakt`); await reload(); }
+        const n = isBetterfly
+          ? await autoSyncDataBetterfly('cost', context, invoices)
+          : await autoSyncData('cost', context, invoices);
+        if (n > 0) { setSyncMsg(`✓ Auto-zsynchronizowano ${n} faktur z ${providerName}`); await reload(); }
       } catch { /* cicho */ }
     })();
   }, [loading, context]);
@@ -181,11 +196,14 @@ export default function FakturyKosztowe() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => handleInfaktSync(false)} disabled={syncing} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: syncing ? 'var(--lf-slate-100)' : 'var(--accent)', color: syncing ? 'var(--fg-3)' : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
                 {syncing ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
-                {syncing ? 'Synchronizuję…' : 'Synchronizuj z inFakt'}
+                {syncing ? 'Synchronizuję…' : `Synchronizuj z ${providerName}`}
               </button>
-              <button onClick={() => handleInfaktSync(true)} disabled={syncing} title="Pełna re-archiwizacja wszystkich dokumentów i załączników" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--accent)', border: '1px solid var(--border-1)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
-                <Upload size={15} /> Pełna archiwizacja
-              </button>
+              {/* Betterfly nie udostępnia plików przez API — archiwizacja tylko dla inFakt */}
+              {!isBetterfly && (
+                <button onClick={() => handleInfaktSync(true)} disabled={syncing} title="Pełna re-archiwizacja wszystkich dokumentów i załączników" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--accent)', border: '1px solid var(--border-1)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
+                  <Upload size={15} /> Pełna archiwizacja
+                </button>
+              )}
             </div>
           )}
         </div>

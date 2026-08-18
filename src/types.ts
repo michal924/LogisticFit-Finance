@@ -32,6 +32,8 @@ export interface Invoice {
   attachments?: { name: string; url: string }[];  // wszystkie dokumenty faktury (główny + załączniki)
   infaktId?: string;    // id/uuid w inFakt (transient — do archiwizacji, nie zapisywane)
   infaktUuid?: string;
+  sourceSystem?: 'infakt' | 'betterfly';  // system źródłowy (JDG → inFakt, Spółka → Betterfly)
+  sourceId?: string;    // id dokumentu w systemie źródłowym (transient)
 }
 
 export interface BankTransaction {
