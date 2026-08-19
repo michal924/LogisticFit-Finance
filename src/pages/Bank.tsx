@@ -19,14 +19,16 @@ const OWNER_RE = /LogisticFit/i;
 
 function deriveKind(d: string): string {
   const s = (d || '').toLowerCase();
-  if (s.includes('pobranie opłaty') || s.includes('prowizj') || s.includes('prowadzenie rachunku')) return 'Opłata / prowizja';
+  if (s.includes('pobranie opłaty') || s.includes('prowizj') || s.includes('prowadzenie rachunku') || s.includes('opł. za') || s.includes('opłata za')) return 'Opłata / prowizja';
+  if (s.includes('płatność kartą') || s.includes('platnosc karta')) return 'Płatność kartą';
+  if (s.includes('wpłatomat') || s.includes('wpłata gotówk') || s.includes('wpłata własna')) return 'Wpłata gotówki';
   if (s.includes('wypłata') || s.includes('bankomat')) return 'Wypłata gotówki';
-  if (s.includes('zus') || s.includes('us-') || s.includes('urząd skarb')) return 'ZUS / US';
+  if (s.includes('zus') || s.includes('us-') || s.includes('urząd skarb') || s.includes('/vat/')) return 'ZUS / US / VAT';
   if (s.includes('przelew')) return 'Przelew';
   return 'Płatność';
 }
 
-type Row = { id?: string; date: string; title: string; counterparty: string; amount: number; balance: number; kind: string; dir: 'in' | 'out'; };
+type Row = { id?: string; date: string; title: string; counterparty: string; amount: number; balance: number; kind: string; dir: 'in' | 'out'; account?: string; ref?: string; };
 
 // Parser CSV Alior Bank — kolumny:
 // 0:Data transakcji 1:Data księgowania 2:Nadawca 3:Odbiorca 4:Szczegóły 5:Kwota operacji 6:Waluta ...
@@ -49,9 +51,61 @@ function parseAliorCSV(text: string): Row[] {
     const counterparty = (other && !OWNER_RE.test(other)) ? other : '';
     let title = details || counterparty || receiver || sender || '—';
     if (counterparty && !title.includes(counterparty)) title = `${title} · ${counterparty}`;
-    rows.push({ date, title, counterparty, amount, balance: 0, kind: deriveKind(details), dir });
+    rows.push({ date, title, counterparty, amount, balance: 0, kind: deriveKind(details), dir, account: 'firmowy', ref: '' });
   }
   return rows;
+}
+
+// Parser ING — eksport XML (ISO 20022 / CAMT.052 „Historia operacji").
+// Kwoty zawsze dodatnie; kierunek z <CdtDbtInd> (CRDT=wpływ, DBIT=wydatek).
+// Kontrahent: przy wpływie <Dbtr>, przy wydatku <Cdtr>; tytuł z <RmtInf><Ustrd>.
+// Brak salda w pliku → liczone narastająco przy odczycie. <TxId> = unikalny ref (dedup).
+function parseINGXml(text: string): Row[] {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) return [];
+  const t = (el: Element | null | undefined) => (el?.textContent || '').trim();
+  const first = (parent: Element | Document, tag: string) => parent.getElementsByTagName(tag)[0] as Element | undefined;
+
+  const iban = t(first(doc, 'IBAN')).replace(/\s/g, '');
+  const account = iban ? iban.slice(-4) : 'ING';
+  const rows: Row[] = [];
+
+  for (const ntry of Array.from(doc.getElementsByTagName('Ntry'))) {
+    const amt = Math.abs(plNum(t(first(ntry, 'Amt'))));
+    if (!amt) continue;
+    const dir: 'in' | 'out' = t(first(ntry, 'CdtDbtInd')) === 'DBIT' ? 'out' : 'in';
+    const amount = dir === 'out' ? -amt : amt;
+
+    const bookg = first(ntry, 'BookgDt');
+    const dEl = bookg ? (first(bookg, 'DtTm') || first(bookg, 'Dt')) : undefined;
+    const date = t(dEl).split('T')[0];
+    if (!date) continue;
+
+    // strona przeciwna: wydatek → odbiorca (Cdtr), wpływ → nadawca (Dbtr)
+    const partyEl = first(ntry, dir === 'out' ? 'Cdtr' : 'Dbtr');
+    let cp = partyEl ? t(first(partyEl, 'Nm')).split('|')[0].trim() : '';
+    if (OWNER_RE.test(cp)) cp = '';   // własne konto/przeksięgowanie
+
+    const ustrd = t(first(ntry, 'Ustrd'));
+    const ref = t(first(ntry, 'TxId'));
+    let title = ustrd || cp || '—';
+    if (cp && !title.includes(cp)) title = `${title} · ${cp}`;
+
+    rows.push({ date, title, counterparty: cp, amount, balance: 0, kind: deriveKind(title), dir, account, ref });
+  }
+  return rows;
+}
+
+// Wykrywa format i dekoduje (ING XML bywa w WINDOWS-1250), zwraca transakcje
+function parseBankFile(buf: ArrayBuffer): Row[] {
+  const utf8 = new TextDecoder('utf-8').decode(buf);
+  const isXml = /^﻿?\s*<\?xml|BkToCstmrAcctRpt/.test(utf8.slice(0, 300));
+  if (isXml) {
+    const enc = (utf8.match(/encoding=["']([\w-]+)["']/i)?.[1] || 'utf-8').toLowerCase();
+    const text = /1250/.test(enc) ? new TextDecoder('windows-1250').decode(buf) : utf8;
+    return parseINGXml(text);
+  }
+  return parseAliorCSV(utf8);
 }
 
 export default function Bank() {
@@ -84,12 +138,19 @@ export default function Bank() {
             balance: 0,
             kind: deriveKind(title),
             dir: amount < 0 ? 'out' : 'in',
+            account: f.BankAccount || 'firmowy',
+            ref: f.ExtRef || '',
           };
         });
-        // Saldo narastająco (od najstarszej) — CSV Alior nie zawiera salda
-        const asc = [...mapped].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-        let run = 0;
-        asc.forEach(r => { run += r.amount; r.balance = run; });
+        // Saldo narastająco PER KONTO (pliki banków nie zawierają salda) —
+        // Spółka ma 2 rachunki ING (bieżący + VAT), więc nie mieszamy ich sald.
+        const byAcct: Record<string, Row[]> = {};
+        for (const r of mapped) (byAcct[r.account || 'firmowy'] ||= []).push(r);
+        for (const group of Object.values(byAcct)) {
+          const asc = [...group].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+          let run = 0;
+          asc.forEach(r => { run += r.amount; r.balance = run; });
+        }
         mapped.sort((a, b) => b.date.localeCompare(a.date));
         setRows(mapped);
       })
@@ -106,7 +167,15 @@ export default function Bank() {
            (!to || r.date <= to);
   });
 
-  const balance = rows[0]?.balance ?? 0;
+  // Saldo łączne = suma sald wszystkich kont (najnowszy rekord każdego konta)
+  const balance = (() => {
+    const latest: Record<string, Row> = {};
+    for (const r of rows) {
+      const a = r.account || 'firmowy';
+      if (!latest[a] || r.date > latest[a].date) latest[a] = r;
+    }
+    return Object.values(latest).reduce((s, r) => s + r.balance, 0);
+  })();
   const inflow  = rows.filter(r => r.dir === 'in').reduce((s, r) => s + Math.abs(r.amount), 0);
   const outflow = rows.filter(r => r.dir === 'out').reduce((s, r) => s + Math.abs(r.amount), 0);
 
@@ -115,15 +184,16 @@ export default function Bank() {
     if (!file) return;
     setImporting(true); setImportMsg('');
     try {
-      const text = await file.text();
-      const parsed = parseAliorCSV(text);
-      if (!parsed.length) { setImportMsg('Nie rozpoznano wierszy w pliku (format Alior?)'); return; }
-      // dedup względem już zaimportowanych (data|kwota|opis)
-      const existing = new Set(rows.map(r => `${r.date}|${r.amount}|${r.title}`));
+      const buf = await file.arrayBuffer();
+      const parsed = parseBankFile(buf);
+      if (!parsed.length) { setImportMsg('Nie rozpoznano transakcji w pliku (obsługiwane: Alior CSV, ING XML)'); return; }
+      // dedup: ING ma unikalny TxId (ref); Alior bez ref → klucz data|kwota|opis
+      const keyOf = (r: Row) => r.ref ? `ref:${r.ref}` : `${r.date}|${r.amount}|${r.title}`;
+      const existing = new Set(rows.map(keyOf));
       let ok = 0, skip = 0;
       for (let i = 0; i < parsed.length; i++) {
         const r = parsed[i];
-        const key = `${r.date}|${r.amount}|${r.title}`;
+        const key = keyOf(r);
         if (existing.has(key)) { skip++; continue; }
         existing.add(key);
         await addListItem('Finance Transactions', {
@@ -132,7 +202,8 @@ export default function Bank() {
           Amount: r.amount,
           Balance: 0,
           TransactionType: r.dir === 'in' ? 'credit' : 'debit',
-          BankAccount: 'firmowy',
+          BankAccount: r.account || 'firmowy',
+          ExtRef: r.ref || '',
           Context: context,
         });
         ok++;
@@ -181,13 +252,17 @@ export default function Bank() {
       <div className="page-h">
         <div>
           <h1>Bank firmowy</h1>
-          <div className="page-sub">Rachunek bieżący · Alior Bank · import historii operacji (CSV)</div>
+          <div className="page-sub">
+            {context === 'spolka'
+              ? 'Rachunek firmowy · ING Bank Śląski · import historii operacji (XML)'
+              : 'Rachunek bieżący · Alior Bank · import historii operacji (CSV)'}
+          </div>
         </div>
         <div className="page-actions">
           <label className={`btn btn-secondary${importing ? ' disabled' : ''}`} style={{ cursor: importing ? 'default' : 'pointer' }}>
             <Ico name="Upload" size={15} />
             {importing ? 'Pracuję…' : 'Importuj CSV'}
-            <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: 'none' }} onChange={handleImport} disabled={importing} />
+            <input ref={fileRef} type="file" accept=".csv,.txt,.xml" style={{ display: 'none' }} onChange={handleImport} disabled={importing} />
           </label>
           <button className="btn btn-secondary" onClick={handleExport}><Ico name="Download" size={15} /> Eksportuj</button>
           {rows.length > 0 && (
@@ -273,7 +348,7 @@ export default function Bank() {
               {loading ? (
                 <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--fg-3)' }}>Ładowanie…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--fg-3)' }}>Brak transakcji — zaimportuj plik CSV z Alior Banku</td></tr>
+                <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--fg-3)' }}>{context === 'spolka' ? 'Brak transakcji — zaimportuj plik XML z ING (Historia operacji)' : 'Brak transakcji — zaimportuj plik CSV z Alior Banku'}</td></tr>
               ) : filtered.map((r, i) => {
                 const open = expanded === (r.id || String(i));
                 const key = r.id || String(i);
@@ -302,8 +377,9 @@ export default function Bank() {
                                 ['Rodzaj', r.kind],
                                 ['Kierunek', r.dir === 'in' ? 'Wpływ' : 'Wydatek'],
                                 ['Kontrahent', r.counterparty || '—'],
+                                ['Konto', r.account && r.account !== 'firmowy' ? `…${r.account}` : 'firmowy'],
                                 ['Kwota', `${r.dir === 'in' ? '+' : ''}${fmt(r.amount)} PLN`],
-                                ['Saldo po operacji', `${fmt(r.balance)} PLN`],
+                                ['Saldo po operacji (konto)', `${fmt(r.balance)} PLN`],
                               ].map(([l, v]) => (
                                 <div key={l}><div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 2 }}>{l}</div><div style={{ fontWeight: 500 }}>{v}</div></div>
                               ))}
