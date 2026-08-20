@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { Ico } from '../components/ui/icons';
 import type { Invoice } from '../types';
 import { getInvoices } from '../services/invoiceService';
-import { loadTransactions, type Txn } from '../services/paymentMatch';
+import { loadTransactions, annotatePayments, type Txn } from '../services/paymentMatch';
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -21,16 +21,29 @@ export default function RaportySpolka() {
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<Invoice[]>([]);
   const [costs, setCosts] = useState<Invoice[]>([]);
+  const [proformas, setProformas] = useState<Invoice[]>([]);
   const [txns, setTxns] = useState<Txn[]>([]);
   const [err, setErr] = useState('');
 
   useEffect(() => {
     setLoading(true); setErr('');
-    Promise.all([getInvoices('sales', context), getInvoices('cost', context), loadTransactions(context)])
-      .then(([s, c, t]) => { setSales(s); setCosts(c); setTxns(t); })
+    Promise.all([getInvoices('sales', context), getInvoices('cost', context), getInvoices('proforma', context), loadTransactions(context)])
+      .then(([s, c, pf, t]) => {
+        setSales(s); setCosts(c); setTxns(t);
+        setProformas(annotatePayments(pf, t));   // oznacz opłacone proformy wg przelewów
+      })
       .catch(e => setErr(e.message || 'Błąd pobierania danych'))
       .finally(() => setLoading(false));
   }, [context]);
+
+  // Opłacone proformy, które NIE mają jeszcze odpowiadającej faktury sprzedaży
+  // (dopasowanie po kwocie brutto + pierwszym członie nazwy kontrahenta).
+  const awaitingInvoice = useMemo(() => {
+    const cpKey = (s: string) => (s || '').toLowerCase().split(' ')[0];
+    return proformas.filter(p => p.paid).filter(p =>
+      !sales.some(s => Math.abs(s.grossTotal - p.grossTotal) < 0.02 && cpKey(s.counterparty) === cpKey(p.counterparty)));
+  }, [proformas, sales]);
+  const awaitingSum = awaitingInvoice.reduce((s, p) => s + p.grossTotal, 0);
 
   const selKey = `${selYear}-${String(selMonth + 1).padStart(2, '0')}`;
   const sumBy = (arr: Invoice[], key: string, field: 'netTotal' | 'vatTotal') =>
@@ -139,6 +152,44 @@ export default function RaportySpolka() {
               <div className="delta">{vatDue >= 0 ? 'należny − naliczony' : 'nadwyżka naliczonego'}</div>
             </div>
           </div>
+
+          {/* Opłacone proformy oczekujące na fakturę */}
+          {awaitingInvoice.length > 0 && (
+            <div className="card" style={{ marginBottom: '1.5rem', borderColor: '#e3d9f5' }}>
+              <div className="card-head">
+                <span><Ico name="AlertTriangle" size={14} style={{ verticalAlign: '-2px', marginRight: 6, color: '#8b6fc8' }} />Opłacone proformy oczekujące na fakturę</span>
+                <span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 400 }}>pieniądze wpłynęły, faktura sprzedaży jeszcze niewystawiona</span>
+              </div>
+              <div className="card-body" style={{ padding: 0 }}>
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead><tr>
+                      <th>Proforma</th><th>Kontrahent</th>
+                      <th style={{ textAlign: 'right' }}>Brutto</th>
+                      <th style={{ textAlign: 'right' }}>Zapłata (bank)</th>
+                    </tr></thead>
+                    <tbody>
+                      {awaitingInvoice.map(p => (
+                        <tr key={p.spId || p.number}>
+                          <td style={{ fontWeight: 600 }}>{p.number}</td>
+                          <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.counterparty || '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmt(p.grossTotal)}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#239d46' }}>{p.matchedDate || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ fontWeight: 700, borderTop: '2px solid var(--lf-slate-200)' }}>
+                        <td colSpan={2}>Razem ({awaitingInvoice.length})</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{fmt(awaitingSum)}</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* SEKCJA 1: Wynik finansowy */}
           <div className="card" style={{ marginBottom: '1.5rem' }}>
