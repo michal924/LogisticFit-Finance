@@ -134,9 +134,9 @@ export default function RaportySpolka() {
               <div className="delta">z kosztów</div>
             </div>
             <div className="kpi">
-              <div className="label"><span className="ico"><Ico name="Coins" size={15} /></span>VAT do zapłaty</div>
-              <div className="value" style={{ color: vatDue > 0 ? 'var(--lf-danger)' : 'var(--lf-green)' }}>{fmt(vatDue)} <span className="unit">PLN</span></div>
-              <div className="delta">należny − naliczony</div>
+              <div className="label"><span className="ico"><Ico name="Coins" size={15} /></span>{vatDue >= 0 ? 'VAT do zapłaty' : 'VAT do zwrotu/przen.'}</div>
+              <div className="value" style={{ color: vatDue > 0 ? 'var(--lf-danger)' : 'var(--lf-green)' }}>{fmt(Math.abs(vatDue))} <span className="unit">PLN</span></div>
+              <div className="delta">{vatDue >= 0 ? 'należny − naliczony' : 'nadwyżka naliczonego'}</div>
             </div>
           </div>
 
@@ -191,7 +191,7 @@ export default function RaportySpolka() {
                     <th>Miesiąc</th>
                     <th style={{ textAlign: 'right' }}>VAT należny</th>
                     <th style={{ textAlign: 'right' }}>VAT naliczony</th>
-                    <th style={{ textAlign: 'right' }}>Do zapłaty</th>
+                    <th style={{ textAlign: 'right' }}>Saldo VAT (± zapłata/zwrot)</th>
                   </tr></thead>
                   <tbody>
                     {rows.map(r => {
