@@ -19,6 +19,10 @@ function num(v: any): number {
   return isNaN(n) ? 0 : n;
 }
 
+// Mapowanie VatRateId (Comarch Betterfly) → stawka. Potwierdzone: 9 = 23%.
+// Domyślnie 23% (dominująca) — net liczymy zawsze dokładnie, więc ew. inna stawka dotknie tylko VAT proform.
+const VAT_RATE: Record<number, number> = { 9: 0.23 };
+
 function pick(obj: any, ...keys: string[]): any {
   if (!obj) return undefined;
   for (const k of keys) {
@@ -75,6 +79,23 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost' | 'proforma', custMap?: M
 
   const id = pick(raw, 'Id', 'ID', 'id');
 
+  // Sumy: faktury/koszty mają NetTotal itd. na górnym poziomie; proformy NIE —
+  // liczymy z Items (ProductPrice × ilość, VAT wg stawki). VatRateId=9 → 23% (potwierdzone).
+  let net = num(pick(raw, 'NetTotal', 'CurrencyNetTotal'));
+  let vat = num(pick(raw, 'VatTotal', 'CurrencyVatTotal'));
+  let gross = num(pick(raw, 'GrossTotal', 'CurrencyGrossTotal'));
+  if (!net && !gross && Array.isArray(raw.Items)) {
+    net = 0; vat = 0;
+    for (const it of raw.Items) {
+      const qty = num(pick(it, 'Quantity')) || 1;
+      const lineNet = num(pick(it, 'ItemNetValue', 'ProductPrice', 'ProductCurrencyPrice')) * qty;
+      const rate = VAT_RATE[Number(pick(it, 'VatRateId'))] ?? 0.23;
+      net += lineNet;
+      vat += num(pick(it, 'ItemVATValue')) || lineNet * rate;
+    }
+    gross = net + vat;
+  }
+
   return {
     type,
     number: String(number),
@@ -83,9 +104,9 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost' | 'proforma', custMap?: M
     counterparty: partyName(party) || fromMap?.name || (custId !== undefined ? `Kontrahent #${custId}` : ''),
     nip: partyNip(party) || fromMap?.nip || '',
     lines: [],
-    netTotal: num(pick(raw, 'NetTotal', 'CurrencyNetTotal')),
-    vatTotal: num(pick(raw, 'VatTotal', 'CurrencyVatTotal')),
-    grossTotal: num(pick(raw, 'GrossTotal', 'CurrencyGrossTotal')),
+    netTotal: Math.round(net * 100) / 100,
+    vatTotal: Math.round(vat * 100) / 100,
+    grossTotal: Math.round(gross * 100) / 100,
     currency: pick(raw, 'CurrencyCode', 'Currency') || 'PLN',
     paid: payStatus === 1,
     notes,
