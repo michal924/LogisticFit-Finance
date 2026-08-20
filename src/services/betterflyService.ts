@@ -47,10 +47,11 @@ type CustomerInfo = { name: string; nip: string };
 
 // Mapuje rekord Betterfly → nasz Invoice.
 // custMap: Id kontrahenta → {name, nip} — rejestr VAT zakupu podaje tylko CustomerId.
-function mapBetterfly(raw: any, type: 'sales' | 'cost', custMap?: Map<string, CustomerInfo>): Invoice {
-  // Sprzedaż: nabywcą jest PurchasingParty. Zakup/koszt: obiekt strony bywa nieobecny —
+function mapBetterfly(raw: any, type: 'sales' | 'cost' | 'proforma', custMap?: Map<string, CustomerInfo>): Invoice {
+  const salesSide = type === 'sales' || type === 'proforma';
+  // Sprzedaż/proforma: nabywcą jest PurchasingParty. Zakup/koszt: obiekt strony bywa nieobecny —
   // wtedy rozwiązujemy CustomerId z mapy kontrahentów.
-  const party = type === 'sales'
+  const party = salesSide
     ? pick(raw, 'PurchasingParty', 'ReceivingParty', 'Customer')
     : pick(raw, 'SellingParty', 'Seller', 'Supplier', 'Customer');
 
@@ -133,8 +134,8 @@ async function fetchCustomerMap(): Promise<Map<string, CustomerInfo>> {
 }
 
 // Pobiera wszystkie faktury danego typu z Betterfly (przez backend), z nazwami kontrahentów
-export async function fetchBetterfly(type: 'sales' | 'cost'): Promise<Invoice[]> {
-  const endpoint = type === 'sales' ? 'invoices' : 'purchase';
+export async function fetchBetterfly(type: 'sales' | 'cost' | 'proforma'): Promise<Invoice[]> {
+  const endpoint = type === 'sales' ? 'invoices' : type === 'proforma' ? 'proforma' : 'purchase';
   const [rows, custMap] = await Promise.all([fetchAllRaw(endpoint), fetchCustomerMap()]);
   return rows.map(raw => mapBetterfly(raw, type, custMap));
 }
@@ -143,7 +144,7 @@ export async function fetchBetterfly(type: 'sales' | 'cost'): Promise<Invoice[]>
  * Lekki auto-sync DANYCH. Zapisuje tylko nowe/zmienione faktury.
  * Odpowiednik autoSyncData z infaktService.
  */
-export async function autoSyncDataBetterfly(type: 'sales' | 'cost', context: string, existing: Invoice[]): Promise<number> {
+export async function autoSyncDataBetterfly(type: 'sales' | 'cost' | 'proforma', context: string, existing: Invoice[]): Promise<number> {
   const fromBf = await fetchBetterfly(type);
   let changed = 0;
   for (const inv of fromBf) {
@@ -165,7 +166,7 @@ export async function autoSyncDataBetterfly(type: 'sales' | 'cost', context: str
  * `archived` zawsze 0 — Betterfly nie udostępnia plików przez API.
  */
 export async function syncFromBetterfly(
-  type: 'sales' | 'cost',
+  type: 'sales' | 'cost' | 'proforma',
   context: string,
   existing: Invoice[],
   onProgress?: (done: number, total: number, archived: number) => void,

@@ -11,6 +11,7 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   'nav.dashboard':      { pl: 'Dashboard',                      en: 'Dashboard' },
   'nav.sales':          { pl: 'Faktury sprzedaży',              en: 'Sales invoices' },
   'nav.costs':          { pl: 'Faktury kosztowe',               en: 'Cost invoices' },
+  'nav.proformas':      { pl: 'Proformy',                       en: 'Proformas' },
   'nav.bankCompany':    { pl: 'Bank firmowy',                   en: 'Company bank' },
   'nav.bankPrivate':    { pl: 'Bank prywatny',                  en: 'Private bank' },
   'nav.contractors':    { pl: 'Kontrahenci',                    en: 'Contractors' },

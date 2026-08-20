@@ -50,7 +50,7 @@ function invoiceToSp(inv: Invoice, context?: string) {
 }
 
 // context: 'jdg' | 'spolka' — filtruje faktury per działalność (stare rekordy bez Context = jdg)
-export async function getInvoices(type: 'sales' | 'cost', context: string = 'jdg'): Promise<Invoice[]> {
+export async function getInvoices(type: 'sales' | 'cost' | 'proforma', context: string = 'jdg'): Promise<Invoice[]> {
   const items = await InvoicesService.getAll();
   return items
     .filter((i: any) => (i.fields?.Context || 'jdg') === context)

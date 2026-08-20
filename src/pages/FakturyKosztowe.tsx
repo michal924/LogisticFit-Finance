@@ -7,6 +7,7 @@ import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../se
 import { uploadDocument } from '../services/graphService';
 import { syncFromInfakt, autoSyncData } from '../services/infaktService';
 import { syncFromBetterfly, autoSyncDataBetterfly } from '../services/betterflyService';
+import { loadTransactions, annotatePayments } from '../services/paymentMatch';
 import InvoiceDetail from '../components/InvoiceDetail';
 import MultiSelectChip from '../components/MultiSelectChip';
 
@@ -76,7 +77,10 @@ export default function FakturyKosztowe() {
 
   const reload = async () => {
     setLoading(true);
-    try { setInvoices(await getInvoices('cost', context)); }
+    try {
+      const [docs, txns] = await Promise.all([getInvoices('cost', context), loadTransactions(context)]);
+      setInvoices(annotatePayments(docs, txns));   // auto-oznaczanie zapłaty wg przelewów
+    }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   };

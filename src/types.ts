@@ -13,7 +13,7 @@ export interface InvoiceLine {
 export interface Invoice {
   id?: string;          // SharePoint item ID
   spId?: string;        // SharePoint internal ID
-  type: 'sales' | 'cost';
+  type: 'sales' | 'cost' | 'proforma';  // proforma = dokument pro forma (nie przychód podatkowy)
   number: string;
   issueDate: string;
   dueDate: string;
@@ -34,6 +34,9 @@ export interface Invoice {
   infaktUuid?: string;
   sourceSystem?: 'infakt' | 'betterfly';  // system źródłowy (JDG → inFakt, Spółka → Betterfly)
   sourceId?: string;    // id dokumentu w systemie źródłowym (transient)
+  // Dopasowanie do przelewu bankowego (transient — liczone na żywo z transakcji, nie zapisywane)
+  matchedTxn?: string;  // opis pasującego przelewu (gdy opłacona wg banku)
+  matchedDate?: string; // data zaksięgowania przelewu (YYYY-MM-DD)
 }
 
 export interface BankTransaction {

@@ -18,6 +18,7 @@ const RESOURCE_MAP = {
   invoices:  { path: 'invoices',         ver: 'v1.5' },
   purchase:  { path: 'vatpurchasebooks', ver: 'v1.4' },
   customers: { path: 'customers',        ver: 'v1.2' },
+  proforma:  { path: 'proformas',        ver: 'v1.4' },
 };
 
 // Token OAuth2 żyje 600 s. Cache w pamięci instancji (warm start) z marginesem 60 s.

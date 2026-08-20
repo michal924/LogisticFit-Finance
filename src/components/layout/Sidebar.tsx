@@ -8,9 +8,9 @@ import { useContextStore } from '../../stores/contextStore';
 
 // Ekrany dostępne w każdym kontekście (id z NAV)
 const SCREENS_BY_CONTEXT: Record<string, string[]> = {
-  // JDG i Spółka: pełen zakres
+  // JDG i Spółka: pełen zakres. Proformy tylko Spółka (Comarch Betterfly).
   jdg:    ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'dokumenty', 'jpk', 'ustawienia'],
-  spolka: ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'bank', 'kontrahenci', 'koszty', 'raporty', 'dokumenty', 'jpk', 'ustawienia'],
+  spolka: ['', 'faktury-sprzedazy', 'faktury-kosztowe', 'proformy', 'bank', 'kontrahenci', 'koszty', 'raporty', 'dokumenty', 'jpk', 'ustawienia'],
   // Prywatne: tylko przepływy + analiza + dokumenty
   prywatne: ['', 'bank-prywatny', 'koszty', 'raporty', 'dokumenty', 'ustawienia'],
 };
@@ -35,6 +35,7 @@ const NAV = [
     { id: '',            path: '/',                  icon: 'Dashboard',   label: 'nav.dashboard' },
     { id: 'faktury-sprzedazy', path: '/faktury-sprzedazy', icon: 'FileText', label: 'nav.sales' },
     { id: 'faktury-kosztowe',  path: '/faktury-kosztowe',  icon: 'Receipt',  label: 'nav.costs' },
+    { id: 'proformy',          path: '/proformy',          icon: 'FileText', label: 'nav.proformas' },
   ]},
   { section: 'sec.bank', items: [
     { id: 'bank',         path: '/bank',         icon: 'Bank',    label: 'nav.bankCompany' },

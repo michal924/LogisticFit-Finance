@@ -8,6 +8,7 @@ import { AppShell } from './components/layout/AppShell';
 const Dashboard        = React.lazy(() => import('./pages/Dashboard'));
 const FakturySprzedazy = React.lazy(() => import('./pages/FakturySprzedazy'));
 const FakturyKosztowe  = React.lazy(() => import('./pages/FakturyKosztowe'));
+const Proformy         = React.lazy(() => import('./pages/Proformy'));
 const Bank             = React.lazy(() => import('./pages/Bank'));
 const BankPrywatny     = React.lazy(() => import('./pages/BankPrywatny'));
 const Kontrahenci      = React.lazy(() => import('./pages/Kontrahenci'));
@@ -42,6 +43,7 @@ export default function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="faktury-sprzedazy" element={<FakturySprzedazy />} />
                 <Route path="faktury-kosztowe" element={<FakturyKosztowe />} />
+                <Route path="proformy" element={<Proformy />} />
                 <Route path="bank" element={<Bank />} />
                 <Route path="bank-prywatny" element={<BankPrywatny />} />
                 <Route path="kontrahenci" element={<Kontrahenci />} />
