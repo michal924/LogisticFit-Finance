@@ -8,6 +8,7 @@ import { Ico } from '../components/ui/icons';
 import type { Lang } from '../i18n';
 import { makeT } from '../i18n';
 import { getInvoices } from '../services/invoiceService';
+import { annotatePayments } from '../services/paymentMatch';
 import { TransactionsService, filterByContext } from '../services/graphService';
 import type { Invoice } from '../types';
 
@@ -83,9 +84,16 @@ export default function Dashboard() {
       TransactionsService.getAll(),
     ])
       .then(([sales, costs, txns]) => {
-        setSalesInvoices(sales);
-        setCostInvoices(costs);
-        setTransactions(filterByContext(txns, context));
+        const ctxTxns = filterByContext(txns, context);
+        // auto-oznaczanie zapłaty wg przelewów (należności/zobowiązania odzwierciedlają bank)
+        const norm = ctxTxns.map((it: any) => ({
+          date: (it.fields?.TransactionDate || '').split('T')[0],
+          title: it.fields?.Description || '',
+          amount: typeof it.fields?.Amount === 'number' ? it.fields.Amount : parseFloat(it.fields?.Amount || '0') || 0,
+        }));
+        setSalesInvoices(annotatePayments(sales, norm));
+        setCostInvoices(annotatePayments(costs, norm));
+        setTransactions(ctxTxns);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -215,7 +223,7 @@ export default function Dashboard() {
           <div className="card-body">
             {catData.length === 0 ? (
               <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
-                Brak kosztów z kategorią w {selectedYear}.<br />Zsynchronizuj koszty z inFakt.
+                Brak kosztów z kategorią w {selectedYear}.<br />{context === 'spolka' ? 'Zsynchronizuj koszty z Comarch Betterfly.' : 'Zsynchronizuj koszty z inFakt.'}
               </div>
             ) : (
               <>

@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Loader2, RefreshCw, Search, ChevronRight, FileText, ArrowUpRight } from 'lucide-react';
+import { Loader2, RefreshCw, Search, ChevronRight, FileText } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices } from '../services/invoiceService';
 import { syncFromBetterfly, autoSyncDataBetterfly } from '../services/betterflyService';

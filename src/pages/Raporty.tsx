@@ -4,6 +4,13 @@ import { Ico } from '../components/ui/icons';
 import { fetchTax, fetchTaxDetail } from '../services/infaktService';
 import { getInvoices } from '../services/invoiceService';
 import { uploadDocument, listDocuments } from '../services/graphService';
+import RaportySpolka from './RaportySpolka';
+
+// Przełącznik: Spółka → raport z Betterfly+ING; JDG/Prywatne → oficjalne dane inFakt
+export default function Raporty() {
+  const { context } = useOutletContext<{ lang: any; query: string; context: string }>();
+  return context === 'spolka' ? <RaportySpolka /> : <RaportyJdg />;
+}
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -27,7 +34,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className="badge" style={{ background: s.bg, color: s.c, fontWeight: 600 }}>{s.t}</span>;
 }
 
-export default function Raporty() {
+function RaportyJdg() {
   const { context } = useOutletContext<{ lang: any; query: string; context: string }>();
   const now = new Date();
   const [selMonth, setSelMonth] = useState(now.getMonth());
