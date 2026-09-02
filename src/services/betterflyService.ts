@@ -1,5 +1,5 @@
 import type { Invoice } from '../types';
-import { saveInvoice } from './invoiceService';
+import { saveInvoice, getInvoices } from './invoiceService';
 
 // ============================================================
 //  Comarch Betterfly — źródło danych dla kontekstu SPÓŁKA.
@@ -183,8 +183,9 @@ export async function fetchBetterfly(type: 'sales' | 'cost' | 'proforma'): Promi
  * Lekki auto-sync DANYCH. Zapisuje tylko nowe/zmienione faktury.
  * Odpowiednik autoSyncData z infaktService.
  */
-export async function autoSyncDataBetterfly(type: 'sales' | 'cost' | 'proforma', context: string, existing: Invoice[]): Promise<number> {
-  const fromBf = await fetchBetterfly(type);
+export async function autoSyncDataBetterfly(type: 'sales' | 'cost' | 'proforma', context: string, _existing?: Invoice[]): Promise<number> {
+  // Dedup względem ŚWIEŻEJ listy z SharePoint (nie stanu UI) — chroni przed duplikatami
+  const [fromBf, existing] = await Promise.all([fetchBetterfly(type), getInvoices(type, context)]);
   let changed = 0;
   for (const inv of fromBf) {
     const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
@@ -207,10 +208,11 @@ export async function autoSyncDataBetterfly(type: 'sales' | 'cost' | 'proforma',
 export async function syncFromBetterfly(
   type: 'sales' | 'cost' | 'proforma',
   context: string,
-  existing: Invoice[],
+  _existing: Invoice[],
   onProgress?: (done: number, total: number, archived: number) => void,
 ): Promise<{ ok: number; archived: number; total: number }> {
-  const fromBf = await fetchBetterfly(type);
+  // Dedup względem ŚWIEŻEJ listy z SharePoint (nie stanu UI) — chroni przed duplikatami
+  const [fromBf, existing] = await Promise.all([fetchBetterfly(type), getInvoices(type, context)]);
   let ok = 0;
 
   for (let i = 0; i < fromBf.length; i++) {

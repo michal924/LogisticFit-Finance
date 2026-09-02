@@ -77,8 +77,11 @@ export default function FakturySprzedazy() {
   const reload = async () => {
     setLoading(true);
     try {
-      const [docs, txns] = await Promise.all([getInvoices('sales', context), loadTransactions(context)]);
-      setInvoices(annotatePayments(docs, txns));   // auto-oznaczanie zapłaty wg przelewów
+      const docs = await getInvoices('sales', context);
+      // transakcje banku OPCJONALNE — ich błąd nie może wyczyścić listy (ryzyko duplikatów przy auto-sync)
+      let txns: any[] = [];
+      try { txns = await loadTransactions(context); } catch { /* bank niedostępny */ }
+      setInvoices(annotatePayments(docs, txns));
     }
     catch (e) { console.error(e); }
     finally { setLoading(false); }

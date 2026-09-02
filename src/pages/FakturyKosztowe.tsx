@@ -78,8 +78,12 @@ export default function FakturyKosztowe() {
   const reload = async () => {
     setLoading(true);
     try {
-      const [docs, txns] = await Promise.all([getInvoices('cost', context), loadTransactions(context)]);
-      setInvoices(annotatePayments(docs, txns));   // auto-oznaczanie zapłaty wg przelewów
+      const docs = await getInvoices('cost', context);
+      // transakcje banku są OPCJONALNE — ich błąd nie może wyczyścić listy faktur
+      // (pusta lista + auto-sync = ryzyko dopisania duplikatów)
+      let txns: any[] = [];
+      try { txns = await loadTransactions(context); } catch { /* bank niedostępny */ }
+      setInvoices(annotatePayments(docs, txns));
     }
     catch (e) { console.error(e); }
     finally { setLoading(false); }

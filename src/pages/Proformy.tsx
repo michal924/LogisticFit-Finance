@@ -30,7 +30,9 @@ export default function Proformy() {
   const reload = async () => {
     setLoading(true); setExpanded(null);
     try {
-      const [docs, txns] = await Promise.all([getInvoices('proforma', context), loadTransactions(context)]);
+      const docs = await getInvoices('proforma', context);
+      let txns: any[] = [];
+      try { txns = await loadTransactions(context); } catch { /* bank niedostępny */ }
       setRows(annotatePayments(docs, txns));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }

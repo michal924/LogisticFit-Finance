@@ -1,6 +1,6 @@
 import type { Invoice } from '../types';
 import { uploadDocument } from './graphService';
-import { saveInvoice } from './invoiceService';
+import { saveInvoice, getInvoices } from './invoiceService';
 
 // inFakt zwraca kwoty w GROSZACH (1/100 PLN) — konwersja
 function gr(v: any): number {
@@ -116,8 +116,9 @@ function isArchived(url?: string): boolean {
  * Używany przy starcie aplikacji — szybkie odświeżenie statusów z inFakt.
  * @returns liczba zaktualizowanych/dodanych faktur
  */
-export async function autoSyncData(type: 'sales' | 'cost', context: string, existing: Invoice[]): Promise<number> {
-  const fromInfakt = await fetchInfakt(type);
+export async function autoSyncData(type: 'sales' | 'cost', context: string, _existing?: Invoice[]): Promise<number> {
+  // Dedup względem ŚWIEŻEJ listy z SharePoint (nie stanu UI) — chroni przed duplikatami
+  const [fromInfakt, existing] = await Promise.all([fetchInfakt(type), getInvoices(type, context)]);
   let changed = 0;
   for (const inv of fromInfakt) {
     const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
@@ -142,11 +143,12 @@ export async function autoSyncData(type: 'sales' | 'cost', context: string, exis
 export async function syncFromInfakt(
   type: 'sales' | 'cost',
   context: string,
-  existing: Invoice[],
+  _existing: Invoice[],
   onProgress?: (done: number, total: number, archived: number) => void,
   force = false,   // true = pełna re-archiwizacja (ignoruje "już zarchiwizowane", dociąga załączniki)
 ): Promise<{ ok: number; archived: number; total: number }> {
-  const fromInfakt = await fetchInfakt(type);
+  // Dedup względem ŚWIEŻEJ listy z SharePoint (nie stanu UI) — chroni przed duplikatami
+  const [fromInfakt, existing] = await Promise.all([fetchInfakt(type), getInvoices(type, context)]);
   const category = type === 'sales' ? 'Faktury sprzedaży' : 'Faktury kosztowe';
   let ok = 0, archived = 0;
 
