@@ -73,13 +73,25 @@ module.exports = async function (context, req) {
   const qs = `$orderby=${encodeURIComponent(orderby)}&$skip=${skip}&$top=${PAGE_SIZE}`;
   const url = `${BF_BASE}/api2/public/${rsc.ver}/${rsc.path}?${qs}`;
 
-  try {
-    const token = await getToken(clientId, clientSecret);
+  const authedGet = async (tok) => fetch(url, {
+    method: 'GET',
+    headers: { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' },
+  });
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-    });
+  try {
+    let token = await getToken(clientId, clientSecret);
+    let res = await authedGet(token);
+
+    // Token wygasł/odrzucony (invalid_token) — wyczyść cache i spróbuj raz ze świeżym
+    if (res.status === 401 || res.status === 403) {
+      let txt = '';
+      try { txt = await res.clone().text(); } catch {}
+      if (res.status === 401 || /invalid_token|access_token/i.test(txt)) {
+        tokenCache = { value: '', expiresAt: 0 };
+        token = await getToken(clientId, clientSecret);
+        res = await authedGet(token);
+      }
+    }
 
     if (!res.ok) {
       const txt = await res.text();
