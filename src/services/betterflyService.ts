@@ -96,6 +96,24 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost' | 'proforma', custMap?: M
     gross = net + vat;
   }
 
+  // Pozycje faktury (do podglądu) — z Items Betterfly
+  const lines: any[] = Array.isArray(raw.Items) ? raw.Items.map((it: any) => {
+    const qty = num(pick(it, 'Quantity')) || 1;
+    const unit = num(pick(it, 'ProductPrice', 'ProductCurrencyPrice'));
+    const rate = VAT_RATE[Number(pick(it, 'VatRateId'))] ?? 0.23;
+    const na = num(pick(it, 'ItemNetValue')) || unit * qty;
+    const va = num(pick(it, 'ItemVATValue')) || na * rate;
+    return {
+      description: pick(it, 'ProductName', 'ProductDescription', 'Name') || '—',
+      quantity: qty,
+      unitPrice: unit || na,
+      vatRate: Math.round(rate * 100),
+      netAmount: Math.round(na * 100) / 100,
+      vatAmount: Math.round(va * 100) / 100,
+      grossAmount: Math.round((na + va) * 100) / 100,
+    };
+  }) : [];
+
   return {
     type,
     number: String(number),
@@ -103,7 +121,7 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost' | 'proforma', custMap?: M
     dueDate: dueDate || issueDate,
     counterparty: partyName(party) || fromMap?.name || (custId !== undefined ? `Kontrahent #${custId}` : ''),
     nip: partyNip(party) || fromMap?.nip || '',
-    lines: [],
+    lines,
     netTotal: Math.round(net * 100) / 100,
     vatTotal: Math.round(vat * 100) / 100,
     grossTotal: Math.round(gross * 100) / 100,
