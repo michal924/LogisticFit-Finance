@@ -15,6 +15,19 @@ function norm(s: string): string {
   return (s || '').toLowerCase().replace(/\s+/g, '');
 }
 
+// Czy `needle` występuje w `hay` jako odrębny token (bez cyfry tuż przed/po) —
+// żeby numer "1/09/2026" NIE łapał się w "21/09/2026" czy "11/09/2026".
+function tokenIncludes(hay: string, needle: string): boolean {
+  let i = hay.indexOf(needle);
+  while (i !== -1) {
+    const before = i > 0 ? hay[i - 1] : '';
+    const after = i + needle.length < hay.length ? hay[i + needle.length] : '';
+    if (!/[0-9]/.test(before) && !/[0-9]/.test(after)) return true;
+    i = hay.indexOf(needle, i + 1);
+  }
+  return false;
+}
+
 // Pobiera i normalizuje transakcje bankowe danego kontekstu
 export async function loadTransactions(context: string): Promise<Txn[]> {
   const raw = await TransactionsService.getAll();
@@ -38,19 +51,20 @@ export function annotatePayments(docs: Invoice[], txns: Txn[]): Invoice[] {
 
   for (const d of docs) {
     const num = norm(d.number);
-    if (num.length < 4) continue;
+    if (num.length < 4 || !d.grossTotal) continue;
     const wantIn = d.type !== 'cost';   // sprzedaż/proforma → wpływ; koszt → wydatek
+    const dirOk = (t: typeof ntx[number]) => wantIn ? t.amount > 0 : t.amount < 0;
+    // kwota przelewu musi się zgadzać z brutto — chroni przed fałszywym trafieniem
+    // po samym numerze (numery typu "1/09/2026" bywają datami w innych przelewach)
+    const amtOk = (t: typeof ntx[number]) => Math.abs(t.abs - d.grossTotal) < 0.02;
 
-    // 1) numer dokumentu w tytule przelewu + poprawny kierunek
-    let cand = ntx.filter(t => (wantIn ? t.amount > 0 : t.amount < 0) && t.ntitle.includes(num));
+    // 1) numer dokumentu (jako token) + kwota brutto + kierunek
+    let cand = ntx.filter(t => dirOk(t) && amtOk(t) && tokenIncludes(t.ntitle, num));
 
-    // 2) fallback: dokładna kwota brutto + kierunek + pierwszy człon nazwy kontrahenta
-    if (!cand.length && d.grossTotal) {
+    // 2) fallback: kwota brutto + kierunek + pierwszy człon nazwy kontrahenta
+    if (!cand.length) {
       const cp = norm((d.counterparty || '').split(' ')[0]);
-      cand = ntx.filter(t =>
-        (wantIn ? t.amount > 0 : t.amount < 0) &&
-        Math.abs(t.abs - d.grossTotal) < 0.02 &&
-        cp.length >= 3 && t.ntitle.includes(cp));
+      cand = ntx.filter(t => dirOk(t) && amtOk(t) && cp.length >= 3 && t.ntitle.includes(cp));
     }
 
     if (cand.length) {
