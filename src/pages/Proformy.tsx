@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Loader2, RefreshCw, Search, ChevronRight, FileText } from 'lucide-react';
+import { Loader2, RefreshCw, Search, ChevronRight, FileText, FileUp } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices } from '../services/invoiceService';
 import { syncFromBetterfly, autoSyncDataBetterfly } from '../services/betterflyService';
@@ -56,10 +56,10 @@ export default function Proformy() {
   }, [loading, context]);
 
   async function handleSync() {
-    setSyncing(true); setSyncMsg('Pobieram proformy z Comarch Betterfly…');
+    setSyncing(true); setSyncMsg('Pobieram proformy i PDF z Comarch Betterfly…');
     try {
-      const r = await syncFromBetterfly('proforma', context, rows, (done, total) => setSyncMsg(`Synchronizuję… ${done}/${total}`));
-      setSyncMsg(`✓ Zsynchronizowano ${r.ok} proform`);
+      const r = await syncFromBetterfly('proforma', context, rows, (done, total, arch) => setSyncMsg(`Synchronizuję… ${done}/${total} · zarchiwizowano ${arch} PDF`));
+      setSyncMsg(`✓ Zsynchronizowano ${r.ok} proform · zarchiwizowano ${r.archived} PDF w SharePoint`);
       await reload();
     } catch (e: any) {
       setSyncMsg('Błąd Comarch Betterfly: ' + (e.message || e));
@@ -172,6 +172,16 @@ export default function Proformy() {
                               <div key={l}><div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 2 }}>{l}</div><div style={{ fontWeight: 500 }}>{v}</div></div>
                             ))}
                           </div>
+                          {(inv.attachments?.length ? inv.attachments : (inv.fileUrl ? [{ name: 'Proforma (oryginał)', url: inv.fileUrl }] : [])).length > 0 && (
+                            <div style={{ padding: '0 20px 14px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {(inv.attachments?.length ? inv.attachments : [{ name: 'Proforma (oryginał)', url: inv.fileUrl! }]).map((doc, i) => (
+                                <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--lf-navy-50, #f0f4ff)', border: '1px solid var(--lf-navy-200, #c7d0ec)', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
+                                  <FileUp size={14} /> {doc.name} <ChevronRight size={14} />
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}

@@ -55,18 +55,18 @@ export default function FakturySprzedazy() {
   async function handleInfaktSync(force = false) {
     setSyncing(true);
     setSyncMsg(isBetterfly
-      ? 'Pobieram faktury sprzedaży z Comarch Betterfly…'
+      ? (force ? 'Pełna archiwizacja — pobieram PDF wszystkich faktur z Comarch Betterfly…' : 'Pobieram faktury sprzedaży i PDF z Comarch Betterfly…')
       : (force ? 'Pełna archiwizacja — pobieram wszystkie dokumenty i załączniki…' : 'Pobieram i archiwizuję faktury sprzedaży z inFakt…'));
     try {
       const r = isBetterfly
-        ? await syncFromBetterfly('sales', context, invoices, (done, total) => {
-            setSyncMsg(`Synchronizuję… ${done}/${total}`);
-          })
+        ? await syncFromBetterfly('sales', context, invoices, (done, total, arch) => {
+            setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} PDF`);
+          }, force)
         : await syncFromInfakt('sales', context, invoices, (done, total, arch) => {
             setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
           }, force);
       setSyncMsg(isBetterfly
-        ? `✓ Zsynchronizowano ${r.ok} faktur z Comarch Betterfly`
+        ? `✓ Zsynchronizowano ${r.ok} faktur z Comarch Betterfly · zarchiwizowano ${r.archived} PDF w SharePoint`
         : `✓ Zsynchronizowano ${r.ok} faktur · zarchiwizowano ${r.archived} dokumentów w SharePoint`);
       await reload();
     } catch (e: any) {
@@ -205,8 +205,8 @@ export default function FakturySprzedazy() {
                 {syncing ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
                 {syncing ? 'Synchronizuję…' : `Synchronizuj z ${providerName}`}
               </button>
-              {/* Betterfly nie udostępnia plików przez API — archiwizacja tylko dla inFakt */}
-              {!isBetterfly && (
+              {/* Pełna re-archiwizacja PDF: inFakt (dokumenty + załączniki) i Betterfly (wydruk faktury) */}
+              {(
                 <button onClick={() => handleInfaktSync(true)} disabled={syncing} title="Pełna re-archiwizacja wszystkich dokumentów i załączników" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--accent)', border: '1px solid var(--border-1)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
                   <Upload size={15} /> Pełna archiwizacja
                 </button>

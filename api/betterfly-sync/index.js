@@ -6,7 +6,7 @@
 //  Tylko ODCZYT (GET) — nic nie zapisujemy do Betterfly.
 // ============================================================
 
-const BF_BASE = 'https://app.comarchbetterfly.pl';
+const { BF_BASE, bfGet } = require('../shared/betterfly');
 const PAGE_SIZE = 50;
 
 // Zasób + wersja API zależą od typu dokumentu (ustalone diagnostyką ?probe=1):
@@ -20,37 +20,6 @@ const RESOURCE_MAP = {
   customers: { path: 'customers',        ver: 'v1.2' },
   proforma:  { path: 'proformas',        ver: 'v1.4' },
 };
-
-// Token OAuth2 żyje 600 s. Cache w pamięci instancji (warm start) z marginesem 60 s.
-let tokenCache = { value: '', expiresAt: 0 };
-
-async function getToken(clientId, clientSecret) {
-  if (tokenCache.value && Date.now() < tokenCache.expiresAt) return tokenCache.value;
-
-  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const res = await fetch(`${BF_BASE}/api2/public/token`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${basic}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json',
-    },
-    body: 'grant_type=client_credentials',
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Autoryzacja Betterfly (${res.status}): ${txt.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-  const token = data.access_token || data.accessToken;
-  if (!token) throw new Error('Betterfly nie zwrócił access_token');
-
-  const ttl = Number(data.expires || data.expires_in || 600);
-  tokenCache = { value: token, expiresAt: Date.now() + Math.max(60, ttl - 60) * 1000 };
-  return token;
-}
 
 module.exports = async function (context, req) {
   const clientId = process.env.BETTERFLY_CLIENT_ID;
@@ -73,25 +42,8 @@ module.exports = async function (context, req) {
   const qs = `$orderby=${encodeURIComponent(orderby)}&$skip=${skip}&$top=${PAGE_SIZE}`;
   const url = `${BF_BASE}/api2/public/${rsc.ver}/${rsc.path}?${qs}`;
 
-  const authedGet = async (tok) => fetch(url, {
-    method: 'GET',
-    headers: { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' },
-  });
-
   try {
-    let token = await getToken(clientId, clientSecret);
-    let res = await authedGet(token);
-
-    // Token wygasł/odrzucony (invalid_token) — wyczyść cache i spróbuj raz ze świeżym
-    if (res.status === 401 || res.status === 403) {
-      let txt = '';
-      try { txt = await res.clone().text(); } catch {}
-      if (res.status === 401 || /invalid_token|access_token/i.test(txt)) {
-        tokenCache = { value: '', expiresAt: 0 };
-        token = await getToken(clientId, clientSecret);
-        res = await authedGet(token);
-      }
-    }
+    const res = await bfGet(url, clientId, clientSecret);
 
     if (!res.ok) {
       const txt = await res.text();

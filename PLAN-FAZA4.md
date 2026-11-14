@@ -12,16 +12,22 @@ Nie ma dostępu do JDG, Prywatnych ani reszty witryny.
 
 ### Wykonanie (skrypt)
 ```bash
-cd ~/Cash-app/setup
-node grant-accountant-access.mjs <email-księgowej>
+cd ~/Projekty/LogisticFit-Finance
+node setup/grant-accountant-access.mjs <email-księgowej>          # pyta o potwierdzenie, wysyła zaproszenie
+node setup/grant-accountant-access.mjs <email-księgowej> --no-email # bez e-maila
+node setup/grant-accountant-access.mjs --list                       # obecne uprawnienia biblioteki
 ```
+> Skrypty z `~/Cash-app/setup` zaginęły przy migracji (2026-11-01) i zostały odtworzone
+> w `setup/` tego repo (2026-11-14). Logowanie: przy pierwszym uruchomieniu skrypt pokazuje kod
+> do wpisania na microsoft.com/devicelogin (konto właściciela). Token zapisuje się w
+> `~/.logisticfit-finance/token.json` i wystarcza na kolejne uruchomienia.
 Skrypt udostępnia *korzeń* biblioteki Finance Spółka z rolą `read` (mechanizm „invite").
 Dostęp jest ograniczony do tej jednej biblioteki — SharePoint automatycznie nadaje
 „limited access" do witryny (potrzebne do otwarcia), ale pozostałe biblioteki są niewidoczne.
 
 **Cofnięcie dostępu:**
 ```bash
-node grant-accountant-access.mjs <email-księgowej> --revoke
+node setup/grant-accountant-access.mjs <email-księgowej> --revoke
 ```
 
 ### Weryfikacja
@@ -53,10 +59,19 @@ opcja nie pojawi się w portalu. Retencja wymaga Business Premium / E3 / E5.
    > twarda immutabilność istnieje tylko w Purview. Stąd backup poniżej.
 3. **Backup offline (3. kopia)** — `backup-finance-docs.mjs` pobiera wszystkie biblioteki na dysk:
    ```bash
-   cd ~/Cash-app/setup && node backup-finance-docs.mjs
+   cd ~/Projekty/LogisticFit-Finance && node setup/backup-finance-docs.mjs
+   node setup/backup-finance-docs.mjs --dry-run            # tylko policz pliki i rozmiar
+   node setup/backup-finance-docs.mjs --date RRRR-MM-DD    # dokończ przerwany backup
    ```
    Cel: `~/LogisticFit-Finance-Backup/<data>/<biblioteka>/...`. Wznawialny (pomija pobrane).
-   **Zalecenie: uruchamiać co miesiąc/kwartał** (można dodać do harmonogramu).
+   Każdy przebieg zapisuje `manifest.json` (lista plików, rozmiary, błędy).
+   **Harmonogram co miesiąc** (1. dnia o 9:00, LaunchAgent macOS; po pierwszym ręcznym backupie):
+   ```bash
+   ./setup/install-backup-schedule.sh              # instalacja
+   ./setup/install-backup-schedule.sh --uninstall  # usunięcie
+   ```
+   Log: `~/LogisticFit-Finance-Backup/logs/backup.log`. Każdy miesiąc to pełna kopia,
+   więc stare foldery z datami warto co jakiś czas przenieść na dysk zewnętrzny.
 
 ### Gdyby kiedyś jednak Purview (po upgrade do Business Premium)
 Patrz historia git tej sekcji — kroki: purview.microsoft.com → Data Lifecycle Management →
@@ -65,6 +80,7 @@ Retention policies → 5 lat od utworzenia → zakres: witryna `/sites/finance`.
 ---
 
 ## Status
-- [ ] A. Uprawnienia księgowej (skrypt) — czeka na e-mail księgowej
+- [ ] A. Uprawnienia księgowej — skrypt odtworzony (`setup/grant-accountant-access.mjs`), czeka na e-mail księgowej
 - [x] B. Retencja — Purview niedostępny (Business Standard); zamiast tego wersjonowanie +
-      read-only + backup offline (`backup-finance-docs.mjs`). Pozostaje uruchamiać backup cyklicznie.
+      read-only + backup offline (`setup/backup-finance-docs.mjs`, odtworzony 2026-11-14).
+- [ ] B2. Pierwszy backup ręcznie (logowanie) + `./setup/install-backup-schedule.sh`
