@@ -1,13 +1,15 @@
 import type { Invoice } from '../types';
 import { saveInvoice, getInvoices } from './invoiceService';
+import { uploadDocument } from './graphService';
 
 // ============================================================
 //  Comarch Betterfly — źródło danych dla kontekstu SPÓŁKA.
 //  Odpowiednik infaktService (JDG). Tylko odczyt.
 //
-//  RÓŻNICA WOBEC inFAKT: Betterfly nie udostępnia w API plików PDF
-//  ani załączników, więc NIE archiwizujemy dokumentów do SharePoint —
-//  synchronizowane są wyłącznie dane faktur.
+//  PDF: faktury sprzedaży i proformy mają wydruk w API (/{id}/print),
+//  pobierany przez /api/betterfly-pdf i archiwizowany do SharePoint przy
+//  pełnej synchronizacji. Koszty (rejestr VAT zakupu) nie mają w API ani
+//  wydruku, ani załączników — dla nich dokument trzeba wgrać ręcznie.
 // ============================================================
 
 // UWAGA: inFakt zwraca kwoty w groszach, Betterfly wg dokumentacji w złotych
@@ -78,6 +80,10 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost' | 'proforma', custMap?: M
   ].filter(Boolean).join(' · ');
 
   const id = pick(raw, 'Id', 'ID', 'id');
+  // Podgląd PDF przez nasz backend (sprzedaż/proforma). Po archiwizacji zastępowany linkiem SharePoint.
+  const fileUrl = salesSide && id !== undefined
+    ? `/api/betterfly-pdf?type=${type}&id=${encodeURIComponent(String(id))}`
+    : '';
 
   // Sumy: faktury/koszty mają NetTotal itd. na górnym poziomie; proformy NIE —
   // liczymy z Items (ProductPrice × ilość, VAT wg stawki). VatRateId=9 → 23% (potwierdzone).
@@ -128,6 +134,7 @@ function mapBetterfly(raw: any, type: 'sales' | 'cost' | 'proforma', custMap?: M
     currency: pick(raw, 'CurrencyCode', 'Currency') || 'PLN',
     paid: payStatus === 1,
     notes,
+    fileUrl,
     sourceSystem: 'betterfly',
     sourceId: id !== undefined ? String(id) : undefined,
   };
@@ -191,43 +198,79 @@ export async function autoSyncDataBetterfly(type: 'sales' | 'cost' | 'proforma',
     const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
     if (match) {
       inv.spId = match.spId;
-      inv.fileUrl = match.fileUrl;
+      // zachowaj kopię SharePoint / ręcznie wgrane dokumenty; bez nich zostaje link podglądu z Betterfly
+      inv.fileUrl = match.fileUrl || inv.fileUrl;
       inv.attachments = match.attachments;
-      if (match.paid === inv.paid && match.grossTotal === inv.grossTotal && match.netTotal === inv.netTotal) continue;
+      const sameDoc = match.fileUrl === inv.fileUrl;
+      if (sameDoc && match.paid === inv.paid && match.grossTotal === inv.grossTotal && match.netTotal === inv.netTotal) continue;
     }
     try { await saveInvoice(inv, context); changed++; } catch { /* pojedynczy błąd — pomijamy */ }
   }
   return changed;
 }
 
+function isArchived(url?: string): boolean {
+  return !!url && /sharepoint\.com/i.test(url);
+}
+
+const ARCHIVE_CATEGORY: Record<string, string> = {
+  sales: 'Faktury sprzedaży',
+  proforma: 'Proformy',
+};
+
 /**
  * Synchronizuje faktury z Betterfly do SharePoint (dedup po numerze, upsert).
+ * Sprzedaż i proformy: pobiera PDF z Betterfly i archiwizuje w bibliotece kontekstu
+ * (Kategoria/Rok/Miesiąc). Dokument już zarchiwizowany (link SharePoint) jest pomijany,
+ * chyba że force = true. Koszty: tylko dane, bo Betterfly nie daje dla nich pliku.
  * Sygnatura zgodna z syncFromInfakt, żeby UI był wspólny.
- * `archived` zawsze 0 — Betterfly nie udostępnia plików przez API.
  */
 export async function syncFromBetterfly(
   type: 'sales' | 'cost' | 'proforma',
   context: string,
   _existing: Invoice[],
   onProgress?: (done: number, total: number, archived: number) => void,
+  force = false,
 ): Promise<{ ok: number; archived: number; total: number }> {
   // Dedup względem ŚWIEŻEJ listy z SharePoint (nie stanu UI) — chroni przed duplikatami
   const [fromBf, existing] = await Promise.all([fetchBetterfly(type), getInvoices(type, context)]);
-  let ok = 0;
+  const category = ARCHIVE_CATEGORY[type];
+  let ok = 0, archived = 0;
 
   for (let i = 0; i < fromBf.length; i++) {
     const inv = fromBf[i];
+    const previewUrl = inv.fileUrl;
     const match = existing.find(x => x.number && inv.number && x.number.trim().toLowerCase() === inv.number.trim().toLowerCase());
     if (match) {
       inv.spId = match.spId;
-      // zachowaj ręcznie wgrane dokumenty — Betterfly ich nie dostarcza
-      inv.fileUrl = match.fileUrl;
       inv.attachments = match.attachments;
+      if (match.fileUrl) inv.fileUrl = match.fileUrl;
     }
+
+    const alreadyArchived = isArchived(match?.fileUrl) && !force;
+    // Ręcznie wgrany dokument (inny niż nasz link podglądu) też zostawiamy w spokoju
+    const manualDoc = !!match?.fileUrl && !isArchived(match.fileUrl) && !match.fileUrl.startsWith('/api/betterfly-pdf');
+    if (category && previewUrl && !alreadyArchived && !manualDoc) {
+      try {
+        const res = await fetch(previewUrl);
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          const baseName = (inv.number || `dokument-${inv.sourceId || i}`).replace(/[\\/:*?"<>|]/g, '-');
+          const sp = await uploadDocument(context, category, inv.issueDate, `${baseName}.pdf`, buf);
+          inv.fileUrl = sp;
+          const label = type === 'proforma' ? 'Proforma (oryginał)' : 'Faktura (oryginał)';
+          // zastąp wpis oryginału, zachowaj ewentualne ręcznie dodane załączniki
+          const others = (match?.attachments || []).filter(a => a.url !== match?.fileUrl && !a.url.startsWith('/api/betterfly-pdf'));
+          inv.attachments = [{ name: label, url: sp }, ...others];
+          archived++;
+        }
+      } catch { /* PDF nieudany — zostaje link podglądu, spróbujemy przy kolejnej synchronizacji */ }
+    }
+
     await saveInvoice(inv, context);
     ok++;
-    onProgress?.(i + 1, fromBf.length, 0);
+    onProgress?.(i + 1, fromBf.length, archived);
   }
 
-  return { ok, archived: 0, total: fromBf.length };
+  return { ok, archived, total: fromBf.length };
 }

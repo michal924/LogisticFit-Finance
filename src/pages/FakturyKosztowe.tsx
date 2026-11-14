@@ -67,7 +67,7 @@ export default function FakturyKosztowe() {
             setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
           }, force);
       setSyncMsg(isBetterfly
-        ? `✓ Zsynchronizowano ${r.ok} faktur z Comarch Betterfly`
+        ? `✓ Zsynchronizowano ${r.ok} faktur z Comarch Betterfly (Betterfly nie udostępnia PDF kosztów — dokumenty wgraj ręcznie)`
         : `✓ Zsynchronizowano ${r.ok} faktur · zarchiwizowano ${r.archived} dokumentów w SharePoint`);
       await reload();
     } catch (e: any) {
