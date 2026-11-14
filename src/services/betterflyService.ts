@@ -8,8 +8,10 @@ import { uploadDocument } from './graphService';
 //
 //  PDF: faktury sprzedaży i proformy mają wydruk w API (/{id}/print),
 //  pobierany przez /api/betterfly-pdf i archiwizowany do SharePoint przy
-//  pełnej synchronizacji. Koszty (rejestr VAT zakupu) nie mają w API ani
-//  wydruku, ani załączników — dla nich dokument trzeba wgrać ręcznie.
+//  pełnej synchronizacji. Koszty (rejestr VAT zakupu) nie mają w Betterfly
+//  pliku — dopasowujemy je do faktur zakupowych w KSeF (/api/ksef-sync) i
+//  bierzemy PDF/XML z KSeF (/api/ksef-pdf). Numer KSeF zapisujemy w Notes
+//  jako "KSeF: <numer>" (tak samo jak przy inFakt) — z niego wynika oznaczenie.
 // ============================================================
 
 // UWAGA: inFakt zwraca kwoty w groszach, Betterfly wg dokumentacji w złotych
@@ -179,11 +181,78 @@ async function fetchCustomerMap(): Promise<Map<string, CustomerInfo>> {
   return map;
 }
 
+// ---- KSeF: dopasowanie kosztów do faktur zakupowych w KSeF ----
+
+type KsefPurchase = {
+  ksefNumber: string; invoiceNumber: string; issueDate: string;
+  sellerNip: string; sellerName: string; gross: number;
+};
+
+const KSEF_START = '2026-02-01'; // początek obowiązkowego KSeF
+const normNumber = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+const digits = (s: string) => (s || '').replace(/\D/g, '');
+
+/** Numer KSeF zapisany w notatkach faktury ("KSeF: <numer>") albo undefined. */
+export function ksefNumberOf(inv: Pick<Invoice, 'notes'>): string | undefined {
+  return inv.notes?.match(/KSeF:\s*([0-9A-Za-z-]+)/)?.[1];
+}
+
+export const isPreviewLink = (url?: string) =>
+  !!url && (url.startsWith('/api/betterfly-pdf') || url.startsWith('/api/ksef-pdf'));
+
+// Faktury zakupowe z KSeF dla zakresu dat. null = KSeF nieskonfigurowany lub niedostępny.
+async function fetchKsefPurchases(from: string, to: string): Promise<KsefPurchase[] | null> {
+  try {
+    const res = await fetch(`/api/ksef-sync?from=${from}&to=${to}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.configured ? data.invoices : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Oznacza koszty, które są w KSeF: dopisuje "KSeF: <numer>" do notatek i ustawia link
+ * do PDF z KSeF. Dopasowanie po numerze faktury + NIP sprzedawcy (gdy znany),
+ * a bez NIP po numerze + kwocie brutto. Dopasowanie musi być jednoznaczne.
+ * @returns liczba dopasowanych kosztów
+ */
+async function attachKsef(costs: Invoice[]): Promise<number> {
+  const dates = costs.map(c => c.issueDate).filter(d => d >= KSEF_START).sort();
+  if (!dates.length) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const ksef = await fetchKsefPurchases(dates[0], today);
+  if (!ksef) return 0;
+
+  const byNumber = new Map<string, KsefPurchase[]>();
+  for (const k of ksef) {
+    const key = normNumber(k.invoiceNumber || '');
+    if (key) byNumber.set(key, [...(byNumber.get(key) || []), k]);
+  }
+
+  let matched = 0;
+  for (const inv of costs) {
+    const candidates = (byNumber.get(normNumber(inv.number)) || []).filter(k =>
+      digits(inv.nip) ? digits(k.sellerNip) === digits(inv.nip) : Math.abs((k.gross || 0) - inv.grossTotal) < 0.01);
+    if (candidates.length !== 1) continue;
+    const k = candidates[0];
+    inv.notes = [`KSeF: ${k.ksefNumber}`, inv.notes].filter(Boolean).join(' · ');
+    inv.fileUrl = `/api/ksef-pdf?ksef=${encodeURIComponent(k.ksefNumber)}`;
+    if (!inv.counterparty || inv.counterparty.startsWith('Kontrahent #')) inv.counterparty = k.sellerName || inv.counterparty;
+    if (!inv.nip) inv.nip = k.sellerNip;
+    matched++;
+  }
+  return matched;
+}
+
 // Pobiera wszystkie faktury danego typu z Betterfly (przez backend), z nazwami kontrahentów
 export async function fetchBetterfly(type: 'sales' | 'cost' | 'proforma'): Promise<Invoice[]> {
   const endpoint = type === 'sales' ? 'invoices' : type === 'proforma' ? 'proforma' : 'purchase';
   const [rows, custMap] = await Promise.all([fetchAllRaw(endpoint), fetchCustomerMap()]);
-  return rows.map(raw => mapBetterfly(raw, type, custMap));
+  const invoices = rows.map(raw => mapBetterfly(raw, type, custMap));
+  if (type === 'cost') await attachKsef(invoices);
+  return invoices;
 }
 
 /**
@@ -201,7 +270,7 @@ export async function autoSyncDataBetterfly(type: 'sales' | 'cost' | 'proforma',
       // zachowaj kopię SharePoint / ręcznie wgrane dokumenty; bez nich zostaje link podglądu z Betterfly
       inv.fileUrl = match.fileUrl || inv.fileUrl;
       inv.attachments = match.attachments;
-      const sameDoc = match.fileUrl === inv.fileUrl;
+      const sameDoc = match.fileUrl === inv.fileUrl && (match.notes || '') === (inv.notes || '');
       if (sameDoc && match.paid === inv.paid && match.grossTotal === inv.grossTotal && match.netTotal === inv.netTotal) continue;
     }
     try { await saveInvoice(inv, context); changed++; } catch { /* pojedynczy błąd — pomijamy */ }
@@ -216,13 +285,21 @@ function isArchived(url?: string): boolean {
 const ARCHIVE_CATEGORY: Record<string, string> = {
   sales: 'Faktury sprzedaży',
   proforma: 'Proformy',
+  cost: 'Faktury kosztowe',
+};
+
+const ORIGINAL_LABEL: Record<string, string> = {
+  sales: 'Faktura (oryginał)',
+  proforma: 'Proforma (oryginał)',
+  cost: 'Faktura KSeF (PDF)',
 };
 
 /**
  * Synchronizuje faktury z Betterfly do SharePoint (dedup po numerze, upsert).
- * Sprzedaż i proformy: pobiera PDF z Betterfly i archiwizuje w bibliotece kontekstu
- * (Kategoria/Rok/Miesiąc). Dokument już zarchiwizowany (link SharePoint) jest pomijany,
- * chyba że force = true. Koszty: tylko dane, bo Betterfly nie daje dla nich pliku.
+ * Sprzedaż i proformy: PDF z Betterfly. Koszty: PDF + oryginalny XML z KSeF (gdy koszt
+ * jest w KSeF). Archiwizuje w bibliotece kontekstu (Kategoria/Rok/Miesiąc). Dokument już
+ * zarchiwizowany (link SharePoint) jest pomijany, chyba że force = true. Ręcznie wgrane
+ * dokumenty nie są nadpisywane.
  * Sygnatura zgodna z syncFromInfakt, żeby UI był wspólny.
  */
 export async function syncFromBetterfly(
@@ -249,20 +326,32 @@ export async function syncFromBetterfly(
 
     const alreadyArchived = isArchived(match?.fileUrl) && !force;
     // Ręcznie wgrany dokument (inny niż nasz link podglądu) też zostawiamy w spokoju
-    const manualDoc = !!match?.fileUrl && !isArchived(match.fileUrl) && !match.fileUrl.startsWith('/api/betterfly-pdf');
-    if (category && previewUrl && !alreadyArchived && !manualDoc) {
+    const manualDoc = !!match?.fileUrl && !isArchived(match.fileUrl) && !isPreviewLink(match.fileUrl);
+    if (category && isPreviewLink(previewUrl) && !alreadyArchived && !manualDoc) {
       try {
-        const res = await fetch(previewUrl);
+        const res = await fetch(previewUrl!);
         if (res.ok) {
           const buf = await res.arrayBuffer();
           const baseName = (inv.number || `dokument-${inv.sourceId || i}`).replace(/[\\/:*?"<>|]/g, '-');
           const sp = await uploadDocument(context, category, inv.issueDate, `${baseName}.pdf`, buf);
           inv.fileUrl = sp;
-          const label = type === 'proforma' ? 'Proforma (oryginał)' : 'Faktura (oryginał)';
-          // zastąp wpis oryginału, zachowaj ewentualne ręcznie dodane załączniki
-          const others = (match?.attachments || []).filter(a => a.url !== match?.fileUrl && !a.url.startsWith('/api/betterfly-pdf'));
-          inv.attachments = [{ name: label, url: sp }, ...others];
+          const docs = [{ name: ORIGINAL_LABEL[type], url: sp }];
           archived++;
+          // KSeF: archiwizuj też oryginalny XML (to on jest dokumentem w sensie prawnym)
+          if (previewUrl!.startsWith('/api/ksef-pdf')) {
+            try {
+              const xres = await fetch(`${previewUrl}&format=xml`);
+              if (xres.ok) {
+                const xurl = await uploadDocument(context, category, inv.issueDate, `${baseName}.xml`, await xres.arrayBuffer());
+                docs.push({ name: 'Faktura KSeF (XML)', url: xurl });
+                archived++;
+              }
+            } catch { /* XML opcjonalny — PDF już jest */ }
+          }
+          // zastąp wpisy oryginału, zachowaj ewentualne ręcznie dodane załączniki
+          const ownNames = new Set(Object.values(ORIGINAL_LABEL).concat('Faktura KSeF (XML)'));
+          const others = (match?.attachments || []).filter(a => a.url !== match?.fileUrl && !isPreviewLink(a.url) && !ownNames.has(a.name));
+          inv.attachments = [...docs, ...others];
         }
       } catch { /* PDF nieudany — zostaje link podglądu, spróbujemy przy kolejnej synchronizacji */ }
     }

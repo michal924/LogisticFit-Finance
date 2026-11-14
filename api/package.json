@@ -3,5 +3,13 @@
   "version": "1.0.0",
   "description": "Backend API dla Finance LogisticFit — przetwarzanie PDF server-side",
   "main": "process-pdf/index.js",
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@pdf-lib/fontkit": "1.1.1",
+    "fast-xml-parser": "5.11.2",
+    "pdf-lib": "1.17.1",
+    "qrcode": "1.5.4"
+  }
 }

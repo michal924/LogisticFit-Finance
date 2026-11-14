@@ -1,12 +1,12 @@
 // Identyczny ekran co FakturySprzedazy — tylko typ "cost"
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Upload, Loader2, X, Check, Search, ChevronRight, RefreshCw } from 'lucide-react';
+import { Upload, Loader2, X, Check, Search, ChevronRight, RefreshCw, ShieldCheck, ShieldOff } from 'lucide-react';
 import type { Invoice } from '../types';
 import { getInvoices, saveInvoice, removeInvoice, processPdfWithAI } from '../services/invoiceService';
 import { uploadDocument } from '../services/graphService';
 import { syncFromInfakt, autoSyncData } from '../services/infaktService';
-import { syncFromBetterfly, autoSyncDataBetterfly } from '../services/betterflyService';
+import { syncFromBetterfly, autoSyncDataBetterfly, ksefNumberOf } from '../services/betterflyService';
 import { loadTransactions, annotatePayments } from '../services/paymentMatch';
 import InvoiceDetail from '../components/InvoiceDetail';
 import MultiSelectChip from '../components/MultiSelectChip';
@@ -27,6 +27,16 @@ function statusBadge(inv: Invoice) {
 
 function fmt(n: number) {
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+
+// Oznaczenie pochodzenia kosztu: w KSeF (numer w notatkach "KSeF: …") albo spoza KSeF
+function KsefBadge({ inv }: { inv: Invoice }) {
+  const nr = ksefNumberOf(inv);
+  const base = { display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 8, padding: '1px 7px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, verticalAlign: 1, letterSpacing: 0.2 } as const;
+  return nr
+    ? <span title={`Faktura w KSeF: ${nr}`} style={{ ...base, color: '#1f7a3d', background: '#e8f6ec', border: '1px solid #bfe5cb' }}><ShieldCheck size={11} />KSeF</span>
+    : <span title="Brak w KSeF: faktura spoza KSeF (np. sprzed lutego 2026, zagraniczna, paragon) albo jeszcze niedopasowana" style={{ ...base, color: '#7a6a55', background: '#f6f2ea', border: '1px dashed #d8cbb4' }}><ShieldOff size={11} />bez KSeF</span>;
 }
 
 export default function FakturyKosztowe() {
@@ -56,18 +66,18 @@ export default function FakturyKosztowe() {
   async function handleInfaktSync(force = false) {
     setSyncing(true);
     setSyncMsg(isBetterfly
-      ? 'Pobieram faktury zakupu z Comarch Betterfly…'
+      ? (force ? 'Pełna archiwizacja — pobieram PDF i XML kosztów z KSeF…' : 'Pobieram faktury zakupu z Comarch Betterfly i dopasowuję do KSeF…')
       : (force ? 'Pełna archiwizacja — pobieram wszystkie dokumenty i załączniki…' : 'Pobieram i archiwizuję faktury kosztowe z inFakt…'));
     try {
       const r = isBetterfly
-        ? await syncFromBetterfly('cost', context, invoices, (done, total) => {
-            setSyncMsg(`Synchronizuję… ${done}/${total}`);
-          })
+        ? await syncFromBetterfly('cost', context, invoices, (done, total, arch) => {
+            setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} dokumentów z KSeF`);
+          }, force)
         : await syncFromInfakt('cost', context, invoices, (done, total, arch) => {
             setSyncMsg(`${force ? 'Archiwizuję' : 'Synchronizuję'}… ${done}/${total} · zarchiwizowano ${arch} dokumentów`);
           }, force);
       setSyncMsg(isBetterfly
-        ? `✓ Zsynchronizowano ${r.ok} faktur z Comarch Betterfly (Betterfly nie udostępnia PDF kosztów — dokumenty wgraj ręcznie)`
+        ? `✓ Zsynchronizowano ${r.ok} faktur z Comarch Betterfly · zarchiwizowano ${r.archived} dokumentów z KSeF (koszty bez KSeF: wgraj PDF ręcznie)`
         : `✓ Zsynchronizowano ${r.ok} faktur · zarchiwizowano ${r.archived} dokumentów w SharePoint`);
       await reload();
     } catch (e: any) {
@@ -206,8 +216,8 @@ export default function FakturyKosztowe() {
                 {syncing ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
                 {syncing ? 'Synchronizuję…' : `Synchronizuj z ${providerName}`}
               </button>
-              {/* Betterfly nie udostępnia plików przez API — archiwizacja tylko dla inFakt */}
-              {!isBetterfly && (
+              {/* Pełna re-archiwizacja: inFakt (skany) i Betterfly (PDF + XML z KSeF) */}
+              {(
                 <button onClick={() => handleInfaktSync(true)} disabled={syncing} title="Pełna re-archiwizacja wszystkich dokumentów i załączników" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: 'var(--accent)', border: '1px solid var(--border-1)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer' }}>
                   <Upload size={15} /> Pełna archiwizacja
                 </button>
@@ -298,7 +308,7 @@ export default function FakturyKosztowe() {
                     style={{ borderBottom: isActive ? 'none' : '1px solid var(--border)', cursor: 'pointer', background: isActive ? '#f4f6fb' : '#fff' }}
                     onMouseEnter={e => !isActive && (e.currentTarget.style.background = '#f8f9fd')}
                     onMouseLeave={e => !isActive && (e.currentTarget.style.background = '#fff')}>
-                    <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--accent)' }}>{inv.number}</td>
+                    <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--accent)', whiteSpace: 'nowrap' }}>{inv.number}<KsefBadge inv={inv} /></td>
                     <td style={{ padding: '10px 14px', color: 'var(--fg-2)' }}>{inv.issueDate}</td>
                     <td style={{ padding: '10px 14px' }}>{inv.counterparty}</td>
                     <td style={{ padding: '10px 14px', fontFamily: 'JetBrains Mono, monospace', textAlign: 'right' }}>{fmt(inv.netTotal)}</td>
